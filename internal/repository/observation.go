@@ -18,6 +18,20 @@ func NewObsRepository(db *sqlx.DB) obs.Repository {
 	}
 }
 
+func (r *ObservationRepositrory) WriteBatch(ctx context.Context, obs []obs.Observation) error {
+
+	query := `
+		INSERT INTO entities (standart, operator, date, lon, lat, signal_strength, imei, imsi, hash)
+		VALUES (:standart, :operator, :date, :lon, :lat, :signal_strength, :imei, :imsi, :hash)
+		ON CONFLICT (hash) DO NOTHING;`
+
+	if _, err := r.db.NamedExec(query, obs); err != nil {
+		return handleErr(err)
+	}
+
+	return nil
+}
+
 func (r *ObservationRepositrory) GetByIMSI(ctx context.Context, imsi string) ([]obs.Observation, error) {
 	query := `
         SELECT
@@ -35,8 +49,9 @@ func (r *ObservationRepositrory) GetByIMSI(ctx context.Context, imsi string) ([]
     `
 	var result []obs.Observation
 	if err := r.db.SelectContext(ctx, &result, query, imsi); err != nil {
-		return nil, err
+		return nil, handleErr(err)
 	}
+
 	return result, nil
 }
 
@@ -58,7 +73,8 @@ func (r *ObservationRepositrory) GetByIMEI(ctx context.Context, imei string) ([]
     `
 	var result []obs.Observation
 	if err := r.db.SelectContext(ctx, &result, query, imei); err != nil {
-		return nil, err
+		return nil, handleErr(err)
 	}
+
 	return result, nil
 }

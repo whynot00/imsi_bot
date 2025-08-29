@@ -1,16 +1,16 @@
-package models
+package datapump
 
 const (
-	Date           = 2
-	Standart       = 4
-	OpertorCode    = 7
-	Coords         = 11
-	SignalStrength = 12
-	IMSI           = 14
-	IMEI           = 15
+	date           = 2
+	standart       = 4
+	opertorCode    = 7
+	coords         = 11
+	signalStrength = 12
+	imsi           = 14
+	imei           = 15
 )
 
-var IMSIOperators = map[string]string{
+var imsiOperators = map[string]string{
 	"25001": "MTS",
 	"25002": "MegaFon",
 	"25003": "Rostelecom",

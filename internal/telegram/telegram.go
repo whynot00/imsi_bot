@@ -2,13 +2,13 @@ package telegram
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 
 	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 	"github.com/jmoiron/sqlx"
+	fsm "github.com/whynot00/go-telegram-fsm"
 	"github.com/whynot00/imsi_bot/internal/domain/observation"
+	"github.com/whynot00/imsi_bot/internal/domain/states"
 	"github.com/whynot00/imsi_bot/internal/domain/whitelist"
 	"github.com/whynot00/imsi_bot/internal/telegram/handler"
 	"github.com/whynot00/imsi_bot/internal/telegram/middleware"
@@ -18,35 +18,34 @@ type Bot struct {
 	b       *bot.Bot
 	handler *handler.Handler
 	mw      *middleware.Middleware
+	fsm     *fsm.FSM
 }
 
 func New(ctx context.Context, db *sqlx.DB, token string, obsRepo observation.Repository, whlRepo whitelist.Repository) *Bot {
 
+	machine := fsm.New(ctx)
+
 	b, _ := bot.New(token,
-		bot.WithDefaultHandler(
-			func(ctx context.Context, bot *bot.Bot, update *models.Update) {
-				fmt.Printf("%s: %d\n", update.Message.From.Username, update.Message.From.ID)
-			},
-		),
+		bot.WithMiddlewares(fsm.Middleware(machine)),
 	)
 
 	return &Bot{
 		b:       b,
 		handler: handler.Create(db, obsRepo, whlRepo),
 		mw:      middleware.Create(whlRepo),
+		fsm:     machine,
 	}
 
 }
 
 func (b *Bot) InitRoutes() *Bot {
 
-	reg, err := regexp.Compile(`^\d{14,15}$`)
-	if err != nil {
-		panic(err)
-	}
-	b.b.RegisterHandlerRegexp(bot.HandlerTypeMessageText, reg, b.handler.FetchObservation, b.mw.Whitelist)
+	reg, _ := regexp.Compile(`^\d{14,15}$`)
+	b.b.RegisterHandlerRegexp(bot.HandlerTypeMessageText, reg, b.handler.FetchObservation, b.mw.Whitelist, fsm.WithStates(fsm.StateDefault))
 
-	b.b.RegisterHandler(bot.HandlerTypeMessageText, "new", bot.MatchTypeCommand, b.handler.CreateUser, b.mw.Whitelist)
+	// создание пользователя
+	b.b.RegisterHandler(bot.HandlerTypeMessageText, "add_user", bot.MatchTypeCommand, b.handler.CreateUserCommand, b.mw.Whitelist, fsm.WithStates(fsm.StateDefault))
+	b.b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypeContains, b.handler.CreateUser, b.mw.Whitelist, fsm.WithStates(states.CreateUserState))
 
 	b.b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypeContains, b.handler.DownloadUpdate)
 	return b
