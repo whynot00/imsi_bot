@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -40,7 +39,7 @@ func (h *Handler) DownloadUpdate(ctx context.Context, b *bot.Bot, update *models
 
 	defer machine.Finish(ctx)
 
-	filepath := "data/" + update.Message.Document.FileUniqueID + ".csv"
+	filepath := "data/" + update.Message.Document.FileName
 	if err := utils.DownloadFile(ctx, b, update.Message.Document.FileID, filepath); err != nil {
 		utils.MessageError(ctx, b, errorx.ReqError{
 			UserID:  update.Message.From.ID,
@@ -65,8 +64,6 @@ func (h *Handler) DownloadUpdate(ctx context.Context, b *bot.Bot, update *models
 			Err:     err,
 		})
 	}
-
-	os.Remove(filepath)
 
 	b.EditMessageText(ctx, &bot.EditMessageTextParams{
 		ChatID:    update.Message.From.ID,
