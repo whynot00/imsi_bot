@@ -13,7 +13,8 @@ type PumpMaster struct {
 	batchSize int
 	obs       observation.Repository
 
-	batch []observation.Observation
+	countRows int
+	batch     []observation.Observation
 }
 
 func NewPump(batchSize int, obs observation.Repository) *PumpMaster {
@@ -26,13 +27,22 @@ func NewPump(batchSize int, obs observation.Repository) *PumpMaster {
 	}
 }
 
-func (p *PumpMaster) Pump(ctx context.Context, file string) error {
-	f, err := os.Open(file)
-	if err != nil {
-		return err
+func (p *PumpMaster) Pump(ctx context.Context, files ...string) (int, error) {
+
+	p.countRows = 0
+
+	for _, file := range files {
+		f, err := os.Open(file)
+		if err != nil {
+			return p.countRows, err
+		}
+
+		if err := p.load(ctx, f); err != nil {
+			return p.countRows, err
+		}
 	}
 
-	return p.load(ctx, f)
+	return p.countRows, nil
 }
 
 func (p *PumpMaster) load(ctx context.Context, file io.Reader) error {

@@ -38,10 +38,12 @@ func (p *PumpMaster) parse(ctx context.Context, line []string) error {
 
 	if len(p.batch) == p.batchSize {
 
-		if err := p.obs.WriteBatch(ctx, p.batch); err != nil {
+		countRows, err := p.obs.WriteBatch(ctx, p.batch)
+		if err != nil {
 			return err
 		}
 
+		p.countRows += countRows
 		p.batch = []observation.Observation{}
 	}
 
@@ -51,8 +53,9 @@ func (p *PumpMaster) parse(ctx context.Context, line []string) error {
 func (p *PumpMaster) commitLast(ctx context.Context) error {
 
 	if len(p.batch) != 0 {
-		err := p.obs.WriteBatch(ctx, p.batch)
+		countRows, err := p.obs.WriteBatch(ctx, p.batch)
 		p.batch = []observation.Observation{}
+		p.countRows += countRows
 
 		return err
 	}

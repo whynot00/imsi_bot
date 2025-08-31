@@ -18,18 +18,48 @@ func NewObsRepository(db *sqlx.DB) obs.Repository {
 	}
 }
 
-func (r *ObservationRepositrory) WriteBatch(ctx context.Context, obs []obs.Observation) error {
-
-	query := `
-		INSERT INTO entities (standart, operator, date, lon, lat, signal_strength, imei, imsi, hash)
-		VALUES (:standart, :operator, :date, :lon, :lat, :signal_strength, :imei, :imsi, :hash)
-		ON CONFLICT (hash) DO NOTHING;`
-
-	if _, err := r.db.NamedExec(query, obs); err != nil {
-		return handleErr(err)
+func (r *ObservationRepositrory) WriteBatch(ctx context.Context, obs []obs.Observation) (int, error) {
+	if len(obs) == 0 {
+		return 0, nil
 	}
 
-	return nil
+	const q = `
+		INSERT INTO entities (standart, operator, date, lon, lat, signal_strength, imei, imsi, hash)
+		VALUES (:standart, :operator, :date, :lon, :lat, :signal_strength, :imei, :imsi, :hash)
+		ON CONFLICT (hash) DO NOTHING
+		RETURNING 1;`
+
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, handleErr(err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	rows, err := tx.NamedQuery(q, obs)
+	if err != nil {
+		return 0, handleErr(err)
+	}
+	defer rows.Close()
+
+	inserted := 0
+	for rows.Next() {
+		var one int
+		if err := rows.Scan(&one); err != nil {
+			return 0, handleErr(err)
+		}
+		inserted++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, handleErr(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, handleErr(err)
+	}
+
+	return inserted, nil
 }
 
 func (r *ObservationRepositrory) GetByIMSI(ctx context.Context, imsi string) ([]obs.Observation, error) {

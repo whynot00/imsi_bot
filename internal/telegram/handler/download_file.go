@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	fsm "github.com/whynot00/go-telegram-fsm"
 	"github.com/whynot00/imsi_bot/internal/domain/errorx"
 	"github.com/whynot00/imsi_bot/internal/domain/states"
+	"github.com/whynot00/imsi_bot/internal/telegram/formatter"
 	"github.com/whynot00/imsi_bot/internal/telegram/handler/utils"
 	"github.com/whynot00/imsi_bot/internal/telegram/keyboars"
 )
@@ -49,7 +51,14 @@ func (h *Handler) DownloadUpdate(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
-	if err := h.pump.Pump(ctx, filepath); err != nil {
+	msg, _ := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.From.ID,
+		Text:   formatter.FormatFileProcessMsg(update.Message.Document.FileName),
+	})
+
+	t := time.Now()
+	rowsCount, err := h.pump.Pump(ctx, filepath)
+	if err != nil {
 		utils.MessageError(ctx, b, errorx.ReqError{
 			UserID:  update.Message.From.ID,
 			Request: "Загрузка файла",
@@ -58,4 +67,11 @@ func (h *Handler) DownloadUpdate(ctx context.Context, b *bot.Bot, update *models
 	}
 
 	os.Remove(filepath)
+
+	b.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    update.Message.From.ID,
+		MessageID: msg.ID,
+		Text:      formatter.FormatInsertMsg(rowsCount, time.Since(t)),
+	})
+
 }

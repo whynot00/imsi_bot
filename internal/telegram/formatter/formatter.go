@@ -87,3 +87,24 @@ func InternalErrorAdmin(e errorx.ReqError) string {
 		html.EscapeString(errText),
 	)
 }
+
+func FormatInsertMsg(count int, duration time.Duration) string {
+	seconds := duration.Seconds()
+
+	// если строка всего одна — аккуратно склоняем
+	word := "строк"
+	if count == 1 {
+		word = "строка"
+	} else if count > 1 && count < 5 {
+		word = "строки"
+	}
+
+	return fmt.Sprintf(
+		"✅ Добавлено %d %s\n⏱ За %.2f сек.",
+		count, word, seconds,
+	)
+}
+
+func FormatFileProcessMsg(filename string) string {
+	return fmt.Sprintf("⚙️ Файл %s обрабатывается…", filename)
+}
