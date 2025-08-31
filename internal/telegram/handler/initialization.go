@@ -11,6 +11,7 @@ import (
 
 const (
 	CreateNewUserMessageKey = "create_new_user"
+	UpdateDataKey           = "update_data"
 )
 
 type Handler struct {

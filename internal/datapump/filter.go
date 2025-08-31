@@ -11,7 +11,7 @@ import (
 	"github.com/whynot00/imsi_bot/internal/domain/observation"
 )
 
-func (p *PumpMaster) parse(ctx context.Context, line []string) {
+func (p *PumpMaster) parse(ctx context.Context, line []string) error {
 
 	obs := observation.Observation{
 		Standart: line[standart],
@@ -19,6 +19,10 @@ func (p *PumpMaster) parse(ctx context.Context, line []string) {
 		Date:     parseDate(line[date]),
 		IMEI:     parseIMEIorIMSI(line[imei]),
 		IMSI:     parseIMEIorIMSI(line[imsi]),
+	}
+
+	if line[coords] == "" {
+		return nil
 	}
 
 	lat, lon := parseCoords(line[coords])
@@ -34,19 +38,26 @@ func (p *PumpMaster) parse(ctx context.Context, line []string) {
 
 	if len(p.batch) == p.batchSize {
 
-		p.obs.WriteBatch(ctx, p.batch)
+		if err := p.obs.WriteBatch(ctx, p.batch); err != nil {
+			return err
+		}
+
 		p.batch = []observation.Observation{}
 	}
 
+	return nil
 }
 
-func (p *PumpMaster) commitLast(ctx context.Context) {
+func (p *PumpMaster) commitLast(ctx context.Context) error {
 
 	if len(p.batch) != 0 {
+		err := p.obs.WriteBatch(ctx, p.batch)
+		p.batch = []observation.Observation{}
 
-		p.obs.WriteBatch(ctx, p.batch)
+		return err
 	}
 
+	return nil
 }
 
 func parseDate(date string) time.Time {
@@ -58,6 +69,10 @@ func parseDate(date string) time.Time {
 func parseCoords(coords string) (float64, float64) {
 
 	cds := strings.Split(coords, " ")
+
+	if len(cds) != 2 {
+		fmt.Println(coords)
+	}
 
 	lat, _ := strconv.ParseFloat(cds[0], 64)
 	lon, _ := strconv.ParseFloat(cds[1], 64)

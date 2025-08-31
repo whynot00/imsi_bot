@@ -83,21 +83,3 @@ func (h *Handler) FetchObservation(ctx context.Context, b *bot.Bot, update *mode
 	}
 
 }
-
-func (h *Handler) DownloadUpdate(ctx context.Context, b *bot.Bot, update *models.Update) {
-
-	// filepath := "data/" + update.Message.Document.FileUniqueID + ".csv"
-	// if err := downloadFile(ctx, b, update.Message.Document.FileID, filepath); err != nil {
-	// 	messageError(ctx, b, errorx.ReqError{
-	// 		UserID:  update.Message.From.ID,
-	// 		Request: "Загрузка файла",
-	// 		Err:     err,
-	// 	})
-
-	// 	return
-	// }
-
-	// datapump.Pump(filepath, h.db)
-
-	// os.Remove(filepath)
-}

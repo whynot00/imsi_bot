@@ -26,16 +26,16 @@ func NewPump(batchSize int, obs observation.Repository) *PumpMaster {
 	}
 }
 
-func (p *PumpMaster) Pump(ctx context.Context, file string) {
+func (p *PumpMaster) Pump(ctx context.Context, file string) error {
 	f, err := os.Open(file)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	p.load(ctx, f)
+	return p.load(ctx, f)
 }
 
-func (p *PumpMaster) load(ctx context.Context, file io.Reader) {
+func (p *PumpMaster) load(ctx context.Context, file io.Reader) error {
 
 	r := csv.NewReader(file)
 
@@ -45,10 +45,12 @@ func (p *PumpMaster) load(ctx context.Context, file io.Reader) {
 	for {
 		line, err := r.Read()
 		if err == io.EOF {
-			p.commitLast(ctx)
-			break
+			return p.commitLast(ctx)
+
 		}
 
-		p.parse(ctx, line)
+		if err := p.parse(ctx, line); err != nil {
+			return err
+		}
 	}
 }

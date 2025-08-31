@@ -3,32 +3,34 @@ package middleware
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/whynot00/imsi_bot/internal/domain/errorx"
 	"github.com/whynot00/imsi_bot/internal/domain/whitelist"
+	"github.com/whynot00/imsi_bot/internal/telegram/middleware/utils"
 )
 
 func (m *Middleware) Whitelist(next bot.HandlerFunc) bot.HandlerFunc {
 
 	return func(ctx context.Context, bot *bot.Bot, update *models.Update) {
 
-		user, err := m.whl.Touch(ctx, update.Message.From.ID)
+		userID := utils.ExtractUserID(update)
+		username := utils.ExtractUsername(update)
+
+		user, err := m.whl.Touch(ctx, userID)
 		if err != nil {
 			if errors.Is(err, errorx.ErrNoRows) {
 				return
 			}
 
-			fmt.Println(err)
 			return
 		}
 
-		if user.Username != update.Message.From.Username {
+		if user.Username != username {
 			m.whl.Update(ctx, &whitelist.User{
-				Username:   update.Message.From.Username,
-				TelegramID: update.Message.From.ID,
+				Username:   username,
+				TelegramID: userID,
 			})
 		}
 
