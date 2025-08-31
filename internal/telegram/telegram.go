@@ -2,53 +2,61 @@ package telegram
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 
 	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 	"github.com/jmoiron/sqlx"
+	fsm "github.com/whynot00/go-telegram-fsm"
 	"github.com/whynot00/imsi_bot/internal/domain/observation"
+	"github.com/whynot00/imsi_bot/internal/domain/states"
 	"github.com/whynot00/imsi_bot/internal/domain/whitelist"
 	"github.com/whynot00/imsi_bot/internal/telegram/handler"
 	"github.com/whynot00/imsi_bot/internal/telegram/middleware"
+	"github.com/whynot00/imsi_bot/internal/telegram/middleware/matches"
 )
 
 type Bot struct {
 	b       *bot.Bot
 	handler *handler.Handler
 	mw      *middleware.Middleware
+	fsm     *fsm.FSM
 }
 
 func New(ctx context.Context, db *sqlx.DB, token string, obsRepo observation.Repository, whlRepo whitelist.Repository) *Bot {
 
+	machine := fsm.New(ctx)
+	middleware := middleware.Create(whlRepo)
+
 	b, _ := bot.New(token,
-		bot.WithDefaultHandler(
-			func(ctx context.Context, bot *bot.Bot, update *models.Update) {
-				fmt.Printf("%s: %d\n", update.Message.From.Username, update.Message.From.ID)
-			},
-		),
+		bot.WithMiddlewares(fsm.Middleware(machine), middleware.Whitelist),
 	)
 
 	return &Bot{
 		b:       b,
 		handler: handler.Create(db, obsRepo, whlRepo),
-		mw:      middleware.Create(whlRepo),
+		mw:      middleware,
+		fsm:     machine,
 	}
 
 }
 
 func (b *Bot) InitRoutes() *Bot {
 
-	reg, err := regexp.Compile(`^\d{14,15}$`)
-	if err != nil {
-		panic(err)
-	}
-	b.b.RegisterHandlerRegexp(bot.HandlerTypeMessageText, reg, b.handler.FetchObservation, b.mw.Whitelist)
+	regFetch, _ := regexp.Compile(`^\d{14,15}$`)
+	b.b.RegisterHandlerRegexp(bot.HandlerTypeMessageText, regFetch, b.handler.FetchObservation, fsm.WithStates(fsm.StateDefault))
 
-	b.b.RegisterHandler(bot.HandlerTypeMessageText, "new", bot.MatchTypeCommand, b.handler.CreateUser, b.mw.Whitelist)
+	// обновление БД
+	b.b.RegisterHandler(bot.HandlerTypeMessageText, "update", bot.MatchTypeCommand, b.handler.DownloadUpdateCommand, b.mw.Whitelist, fsm.WithStates(fsm.StateDefault))
+	b.b.RegisterHandlerMatchFunc(matches.MatchUpdate, b.handler.DownloadUpdate, fsm.WithStates(states.UploadFileState))
 
-	b.b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypeContains, b.handler.DownloadUpdate)
+	// создание пользователя
+	b.b.RegisterHandler(bot.HandlerTypeMessageText, "add_user", bot.MatchTypeCommand, b.handler.CreateUserCommand, fsm.WithStates(fsm.StateDefault))
+	b.b.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypeContains, b.handler.CreateUser, fsm.WithStates(states.CreateUserState))
+
+	// кнопки
+	//
+	// отмена
+	b.b.RegisterHandler(bot.HandlerTypeCallbackQueryData, "cancel_button", bot.MatchTypeContains, b.handler.CancelButton, fsm.WithStates(fsm.StateAny))
 	return b
 }
 

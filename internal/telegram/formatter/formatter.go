@@ -3,6 +3,7 @@ package formatter
 import (
 	"fmt"
 	"html"
+	"strings"
 	"time"
 
 	"github.com/whynot00/imsi_bot/internal/domain/errorx"
@@ -11,12 +12,15 @@ import (
 
 func ObservationMessage(o *observation.Observation) string {
 
+	var builder strings.Builder
+	builder.WriteString("📡 *Наблюдение*\n")
+	builder.WriteString("`Стандарт : %-8s`\n")
+	builder.WriteString("`Сигнал   : %d db`\n")
+	builder.WriteString("`Дата     : %s`\n")
+	builder.WriteString("`Коорд.   : %.6f, %.6f`\n")
+
 	str := fmt.Sprintf(
-		"📡 *Наблюдение*\n"+
-			"`Стандарт : %-8s`\n"+
-			"`Сигнал   : %d db`\n"+
-			"`Дата     : %s`\n"+
-			"`Коорд.   : %.6f, %.6f`\n",
+		builder.String(),
 		o.Standart,
 		o.SignalStrength,
 		o.Date.UTC().Format("2006-01-02 15:04:05"),
@@ -82,4 +86,25 @@ func InternalErrorAdmin(e errorx.ReqError) string {
 		html.EscapeString(req),
 		html.EscapeString(errText),
 	)
+}
+
+func FormatInsertMsg(count int, duration time.Duration) string {
+	seconds := duration.Seconds()
+
+	// если строка всего одна — аккуратно склоняем
+	word := "строк"
+	if count == 1 {
+		word = "строка"
+	} else if count > 1 && count < 5 {
+		word = "строки"
+	}
+
+	return fmt.Sprintf(
+		"✅ Добавлено %d %s\n⏱ За %.2f сек.",
+		count, word, seconds,
+	)
+}
+
+func FormatFileProcessMsg(filename string) string {
+	return fmt.Sprintf("⚙️ Файл %s обрабатывается…", filename)
 }

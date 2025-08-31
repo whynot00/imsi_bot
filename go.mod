@@ -9,3 +9,5 @@ require (
 )
 
 require github.com/joho/godotenv v1.5.1
+
+require github.com/whynot00/go-telegram-fsm v0.4.0
