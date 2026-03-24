@@ -1,24 +1,23 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/whynot00/imsi-bot/internal/config"
-
-	"github.com/whynot00/imsi-bot/internal/parser"
+	"github.com/whynot00/imsi-bot/internal/db"
+	"github.com/whynot00/imsi-bot/internal/handler"
+	"github.com/whynot00/imsi-bot/internal/handler/middleware"
+	"github.com/whynot00/imsi-bot/internal/repo"
+	"github.com/whynot00/imsi-bot/internal/service"
 )
 
 func main() {
-	// Load .env before anything else.
 	if err := godotenv.Load(); err != nil {
-		log.Println("no .env file found, reading from environment")
+		log.Println("no .env file, reading from environment")
 	}
 
 	cfg, err := config.Load()
@@ -28,86 +27,52 @@ func main() {
 
 	database, err := db.Connect(cfg.Postgres)
 	if err != nil {
-		log.Fatalf("db connect: %v", err)
+		log.Fatalf("db: %v", err)
 	}
 	defer database.Close()
 	fmt.Fprintln(os.Stderr, "connected to postgres")
 
-	inPath := flag.String("in", "", "path to source CSV (required)")
-	kind := flag.String("kind", "", "file type: parametr or rk (required)")
-	outDir := flag.String("out", "output", "directory for output CSVs")
-	encoding := flag.String("encoding", "utf8", "source encoding: utf8 (default) or cp1251")
-	flag.Parse()
+	// --- repos ---
+	deviceRepo := repo.NewDeviceRepo(database)
+	parametrRepo := repo.NewParametrRepo(database)
+	rkRepo := repo.NewRKRepo(database)
+	searchRepo := repo.NewSearchRepo(database)
+	userRepo := repo.NewUserRepo(database)
 
-	if *inPath == "" || *kind == "" {
-		flag.Usage()
-		os.Exit(1)
+	// --- services ---
+	importSvc := service.NewImportService(deviceRepo, parametrRepo, rkRepo)
+	searchSvc := service.NewSearchService(searchRepo, deviceRepo)
+
+	// --- handlers ---
+	searchH := handler.NewSearchHandler(searchSvc)
+	uploadH := handler.NewUploadHandler(importSvc)
+
+	// --- router ---
+	r := gin.Default()
+
+	// статика
+	r.StaticFile("/", "./static/index.html")
+	r.Static("/static", "./static")
+
+	// api
+	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if botToken == "" {
+		log.Fatal("TELEGRAM_BOT_TOKEN is not set")
 	}
 
-	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		log.Fatalf("create output dir: %v", err)
+	auth := middleware.TelegramAuth(botToken, userRepo)
+
+	api := r.Group("/api", auth)
+	{
+		api.GET("/search", searchH.Search)
+		api.GET("/search/suggest", searchH.Suggest)
+		api.POST("/upload/parametr", uploadH.UploadParametr)
+		api.POST("/upload/rk", uploadH.UploadRK)
 	}
 
-	f, err := os.Open(*inPath)
-	if err != nil {
-		log.Fatalf("open input: %v", err)
+	addr := ":" + cfg.Port
+	log.Printf("listening on %s", addr)
+	if err := r.Run(addr); err != nil {
+		log.Fatalf("server: %v", err)
 	}
-	defer f.Close()
-
-	var src io.Reader = f
-	if *encoding == "cp1251" {
-		src, err = windows1251Reader(f)
-		if err != nil {
-			log.Fatalf("encoding setup: %v", err)
-		}
-	}
-
-	base := strings.TrimSuffix(filepath.Base(*inPath), filepath.Ext(*inPath))
-
-	switch *kind {
-	case "parametr":
-		result, err := parser.Parse(src)
-		if err != nil {
-			log.Fatalf("parse: %v", err)
-		}
-
-		writeFile(filepath.Join(*outDir, base+"_devices.csv"), func(w io.Writer) error {
-			return parser.WriteDevices(w, result.Devices)
-		})
-		writeFile(filepath.Join(*outDir, base+"_locations.csv"), func(w io.Writer) error {
-			return parser.WriteLocations(w, result.Locations)
-		})
-
-		fmt.Fprintf(os.Stderr, "devices:   %d\n", len(result.Devices))
-		fmt.Fprintf(os.Stderr, "locations: %d\n", len(result.Locations))
-
-	case "rk":
-		devices, err := parser.ParseRaw(src)
-		if err != nil {
-			log.Fatalf("parse rk: %v", err)
-		}
-
-		writeFile(filepath.Join(*outDir, base+"_rk.csv"), func(w io.Writer) error {
-			return parser.WriteRawDevices(w, devices)
-		})
-
-		fmt.Fprintf(os.Stderr, "rk devices: %d\n", len(devices))
-
-	default:
-		log.Fatalf("unknown -kind %q: must be parametr or rk", *kind)
-	}
-
-	_ = database // repo usage will be wired here
-}
-
-func writeFile(path string, fn func(io.Writer) error) {
-	f, err := os.Create(path)
-	if err != nil {
-		log.Fatalf("create %s: %v", path, err)
-	}
-	defer f.Close()
-	if err := fn(f); err != nil {
-		log.Fatalf("write %s: %v", path, err)
-	}
-	fmt.Fprintf(os.Stderr, "written → %s\n", path)
 }

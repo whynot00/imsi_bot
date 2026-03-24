@@ -67,6 +67,40 @@ func (r *DeviceRepo) FindByIMEI(ctx context.Context, imei string) ([]Device, err
 	return scanDevices(rows)
 }
 
+// SuggestIMSI returns up to 10 IMSI values starting with the given prefix.
+func (r *DeviceRepo) SuggestIMSI(ctx context.Context, prefix string) ([]string, error) {
+	return r.suggest(ctx, "imsi", prefix)
+}
+
+// SuggestIMEI returns up to 10 IMEI values starting with the given prefix.
+func (r *DeviceRepo) SuggestIMEI(ctx context.Context, prefix string) ([]string, error) {
+	return r.suggest(ctx, "imei", prefix)
+}
+
+func (r *DeviceRepo) suggest(ctx context.Context, col, prefix string) ([]string, error) {
+	q := fmt.Sprintf(`
+		SELECT DISTINCT %s FROM devices
+		WHERE %s LIKE $1 || '%%'
+		ORDER BY %s
+		LIMIT 10`, col, col, col)
+
+	rows, err := r.db.QueryContext(ctx, q, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("suggest %s: %w", col, err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func scanDevices(rows *sql.Rows) ([]Device, error) {
 	var out []Device
 	for rows.Next() {
