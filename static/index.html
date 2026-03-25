@@ -2,487 +2,437 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IMSI Bot — Debug</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>IMSI Bot</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@300;400;600;700&family=Tektur:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Unbounded:wght@400;700&display=swap');
+:root {
+  --bg: #080b10;
+  --surface: rgba(12,17,26,0.95);
+  --border: rgba(0,200,255,0.12);
+  --accent: #00c8ff;
+  --accent-dim: rgba(0,200,255,0.15);
+  --text: #d0dde8;
+  --text-dim: #4a5a6a;
+  --mono: 'Azeret Mono', monospace;
+  --head: 'Tektur', sans-serif;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: var(--mono); color: var(--text); }
 
-  :root {
-    --bg: #0a0a0f;
-    --surface: #111118;
-    --border: #1e1e2e;
-    --accent: #00ff9d;
-    --accent2: #ff3e6c;
-    --accent3: #3e8bff;
-    --text: #c8c8d8;
-    --text-dim: #555570;
-    --radius: 6px;
-    --mono: 'JetBrains Mono', monospace;
-    --head: 'Unbounded', sans-serif;
-  }
+#map { position: fixed; inset: 0; z-index: 0; filter: brightness(0.35) saturate(0.6); transition: filter .6s ease; }
+#map.active { filter: brightness(0.7) saturate(0.8); }
+.leaflet-tile-pane { filter: hue-rotate(195deg) invert(1) brightness(0.9); }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  pointer-events: none;
+}
+#overlay.top {
+  justify-content: flex-start;
+  padding-top: 120px;
+}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-    min-height: 100vh;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
+#searchBox {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: all;
+}
 
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.06) 2px, rgba(0,0,0,.06) 4px);
-    pointer-events: none;
-    z-index: 1000;
-  }
+/* поле ввода с тегом типа внутри */
+.search-wrap { position: relative; }
 
-  header {
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+.search-type-tag {
+  position: absolute;
+  left: 12px; top: 50%;
+  transform: translateY(-50%);
+  background: var(--accent-dim);
+  border: 1px solid rgba(0,200,255,0.25);
+  border-radius: 5px;
+  color: var(--accent);
+  font-family: var(--head);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  padding: 3px 7px;
+  cursor: pointer;
+  user-select: none;
+  z-index: 1;
+  transition: background .15s;
+}
+.search-type-tag:hover { background: rgba(0,200,255,0.25); }
 
-  .logo { font-family: var(--head); font-size: 13px; letter-spacing: .12em; color: var(--accent); }
-  .badge { font-size: 10px; padding: 2px 7px; border: 1px solid var(--accent2); color: var(--accent2); border-radius: 2px; letter-spacing: .08em; }
+.search-input {
+  width: 100%;
+  background: rgba(8,11,16,0.88);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 16px;
+  padding: 16px 48px 16px 62px;
+  outline: none;
+  backdrop-filter: blur(16px);
+  transition: border-color .2s, box-shadow .2s;
+  -webkit-appearance: none;
+}
+.search-input::placeholder { color: var(--text-dim); }
+.search-input:focus {
+  border-color: rgba(0,200,255,0.4);
+  box-shadow: 0 0 0 3px rgba(0,200,255,0.07), 0 8px 32px rgba(0,0,0,0.4);
+}
+.search-input:disabled {
+  color: var(--accent);
+  opacity: 1;
+  border-color: rgba(0,200,255,0.3);
+  -webkit-text-fill-color: var(--accent);
+}
 
-  .dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--text-dim); margin-left: auto;
-    transition: all .3s;
-  }
-  .dot.ok  { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-  .dot.err { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+.search-icon {
+  position: absolute; right: 16px; top: 50%;
+  transform: translateY(-50%);
+  width: 20px; height: 20px; opacity: .4; pointer-events: none;
+}
+.search-clear {
+  position: absolute; right: 14px; top: 50%;
+  transform: translateY(-50%);
+  width: 24px; height: 24px;
+  border: none; background: rgba(0,200,255,0.1);
+  border-radius: 50%; cursor: pointer;
+  color: var(--accent); font-size: 14px;
+  display: none; align-items: center; justify-content: center;
+}
+.search-clear.show { display: flex; }
 
-  .dot-label { font-size: 11px; color: var(--text-dim); }
+.suggest-list {
+  background: rgba(8,11,16,0.95);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+  display: none; flex-direction: column;
+  max-height: 220px; overflow-y: auto;
+}
+.suggest-list.open { display: flex; }
+.suggest-item {
+  padding: 13px 20px; cursor: pointer; font-size: 14px;
+  letter-spacing: .04em; border-bottom: 1px solid rgba(0,200,255,0.06);
+  transition: background .1s; display: flex; align-items: center; gap: 10px;
+}
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:hover { background: var(--accent-dim); color: var(--accent); }
+.suggest-icon { font-size: 10px; opacity: .4; }
+.search-loading { padding: 14px 20px; color: var(--text-dim); font-size: 12px; display: none; }
+.search-loading.show { display: block; }
 
-  main {
-    display: grid;
-    grid-template-columns: 260px 1fr;
-    height: calc(100vh - 57px);
-    overflow: hidden;
-  }
+/* sheet */
+#sheet {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+  background: var(--surface); border-top: 1px solid var(--border);
+  border-radius: 20px 20px 0 0;
+  transition: transform .35s cubic-bezier(.4,0,.2,1);
+  max-height: 80vh; display: flex; flex-direction: column;
+  backdrop-filter: blur(20px); padding-bottom: var(--safe-bottom);
+}
+#sheet.peek   { transform: translateY(calc(100% - 72px)); }
+#sheet.half   { transform: translateY(40%); }
+#sheet.full   { transform: translateY(0); }
+#sheet.hidden { transform: translateY(100%); }
 
-  nav {
-    border-right: 1px solid var(--border);
-    padding: 16px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    overflow-y: auto;
-  }
+.sheet-handle { width: 36px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; cursor: pointer; }
+.sheet-header { padding: 12px 20px 10px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; cursor: pointer; }
+.sheet-title { font-family: var(--head); font-size: 13px; letter-spacing: .08em; color: var(--text); flex: 1; }
+.sheet-meta { font-size: 11px; color: var(--text-dim); }
+.sheet-body { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
 
-  .nav-group {
-    font-size: 10px; letter-spacing: .14em; color: var(--text-dim);
-    text-transform: uppercase; margin: 10px 0 4px 8px;
-  }
-  .nav-group:first-child { margin-top: 0; }
+.sighting {
+  padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer; transition: background .15s;
+  display: grid; grid-template-columns: 32px 1fr auto; gap: 0 12px; align-items: start;
+}
+.sighting.active { background: rgba(0,200,255,0.05); }
+.sighting-num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-dim); border: 1px solid rgba(0,200,255,0.25); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+.sighting-main { display: flex; flex-direction: column; gap: 3px; }
+.sighting-time { font-size: 13px; font-weight: 600; color: var(--text); }
+.sighting-detail { font-size: 11px; color: var(--text-dim); }
+.sighting-coords { font-size: 10px; color: var(--accent); opacity: .7; text-align: right; line-height: 1.6; }
+.sighting-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-top: 3px; font-weight: 600; }
+.badge-gsm  { background: rgba(255,150,50,.12);  color: #ff9632; }
+.badge-umts { background: rgba(100,180,255,.12); color: #64b4ff; }
+.badge-lte  { background: rgba(0,200,255,.12);   color: var(--accent); }
+.badge-2g   { background: rgba(255,150,50,.12);  color: #ff9632; }
+.badge-3g   { background: rgba(100,180,255,.12); color: #64b4ff; }
+.badge-4g   { background: rgba(0,200,255,.12);   color: var(--accent); }
 
-  .nav-btn {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px; border-radius: var(--radius);
-    cursor: pointer; border: 1px solid transparent;
-    background: transparent; color: var(--text);
-    font-family: var(--mono); font-size: 12px;
-    text-align: left; transition: all .15s; width: 100%;
-  }
-  .nav-btn:hover { background: var(--border); }
-  .nav-btn.active { background: rgba(0,255,157,.07); border-color: rgba(0,255,157,.2); color: var(--accent); }
+.custom-marker { width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid rgba(0,200,255,0.8); background: rgba(0,200,255,0.25); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(0,200,255,0.4); transition: all .2s; }
+.custom-marker.active { background: rgba(0,200,255,0.5); box-shadow: 0 0 20px rgba(0,200,255,0.7); }
+.custom-marker span { transform: rotate(45deg); font-size: 10px; font-weight: 700; color: var(--accent); }
 
-  .method {
-    font-size: 9px; font-weight: 700; padding: 2px 5px;
-    border-radius: 3px; letter-spacing: .05em; flex-shrink: 0;
-  }
-  .GET  { background: rgba(62,139,255,.15); color: var(--accent3); }
-  .POST { background: rgba(0,255,157,.12);  color: var(--accent); }
-  .CFG  { background: rgba(255,204,0,.1);   color: #ffcc00; }
+#toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(8,11,16,0.95); border: 1px solid var(--border); border-radius: 10px; padding: 10px 20px; font-size: 12px; color: var(--text-dim); z-index: 30; opacity: 0; transition: all .3s ease; pointer-events: none; white-space: nowrap; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  .content {
-    display: grid;
-    grid-template-rows: 1fr 1fr;
-    overflow: hidden;
-  }
-
-  .panel {
-    padding: 20px 24px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .panel + .panel { border-top: 1px solid var(--border); background: rgba(0,0,0,.25); }
-
-  .panel-title {
-    font-family: var(--head); font-size: 10px; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--text-dim);
-    display: flex; align-items: center; gap: 8px;
-  }
-  .panel-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-  .form-grid { display: flex; flex-direction: column; gap: 10px; }
-
-  .field { display: flex; flex-direction: column; gap: 4px; }
-
-  label { font-size: 10px; letter-spacing: .1em; color: var(--text-dim); text-transform: uppercase; }
-
-  input[type=text], input[type=file], select {
-    background: var(--surface); border: 1px solid var(--border);
-    color: var(--text); font-family: var(--mono); font-size: 12px;
-    padding: 8px 10px; border-radius: var(--radius);
-    outline: none; transition: border-color .15s; width: 100%;
-  }
-  input[type=text]:focus, select:focus { border-color: rgba(0,255,157,.35); }
-
-  .btn {
-    padding: 9px 18px; border: 1px solid var(--accent);
-    background: rgba(0,255,157,.07); color: var(--accent);
-    font-family: var(--mono); font-size: 12px; font-weight: 600;
-    letter-spacing: .07em; border-radius: var(--radius);
-    cursor: pointer; transition: all .15s; align-self: flex-start;
-  }
-  .btn:hover { background: rgba(0,255,157,.16); }
-  .btn:active { transform: scale(.98); }
-
-  .info-block {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 12px;
-    font-size: 12px; line-height: 1.8;
-    display: flex; flex-direction: column; gap: 4px;
-  }
-  .info-row { display: flex; gap: 8px; }
-  .info-key { color: var(--text-dim); min-width: 100px; flex-shrink: 0; }
-  .info-val { color: var(--text); word-break: break-all; }
-  .info-val.ok  { color: var(--accent); }
-  .info-val.err { color: var(--accent2); }
-
-  .resp-meta {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 11px; display: none;
-  }
-  .resp-status {
-    padding: 2px 7px; border-radius: 3px; font-weight: 700;
-  }
-  .resp-status.ok  { background: rgba(0,255,157,.12);  color: var(--accent); }
-  .resp-status.err { background: rgba(255,62,108,.12); color: var(--accent2); }
-  .resp-time { color: var(--text-dim); }
-  .resp-url  { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-
-  pre {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 14px;
-    overflow: auto; font-size: 12px; line-height: 1.7;
-    flex: 1; white-space: pre-wrap; word-break: break-all;
-  }
-
-  .empty { color: var(--text-dim); font-size: 12px; padding: 24px 0; text-align: center; }
-
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 </style>
 </head>
 <body>
 
-<header>
-  <span class="logo">IMSI&nbsp;Bot</span>
-  <span class="badge">DEBUG</span>
-  <span class="dot-label" id="dotLabel">—</span>
-  <span class="dot" id="dot"></span>
-</header>
+<div id="map"></div>
 
-<main>
-  <nav>
-    <div class="nav-group">Система</div>
-    <button class="nav-btn active" onclick="show('auth')">
-      <span class="method CFG">TG</span> Авторизация
-    </button>
-
-    <div class="nav-group">Search</div>
-    <button class="nav-btn" onclick="show('searchIMSI')">
-      <span class="method GET">GET</span> /search?imsi
-    </button>
-    <button class="nav-btn" onclick="show('searchIMEI')">
-      <span class="method GET">GET</span> /search?imei
-    </button>
-    <button class="nav-btn" onclick="show('suggest')">
-      <span class="method GET">GET</span> /search/suggest
-    </button>
-
-    <div class="nav-group">Upload</div>
-    <button class="nav-btn" onclick="show('uploadParametr')">
-      <span class="method POST">POST</span> /upload/parametr
-    </button>
-    <button class="nav-btn" onclick="show('uploadRK')">
-      <span class="method POST">POST</span> /upload/rk
-    </button>
-  </nav>
-
-  <div class="content">
-    <div class="panel" id="requestPanel">
-
-      <!-- AUTH -->
-      <div id="pane-auth">
-        <div class="panel-title">Telegram initData</div>
-        <div class="info-block" id="tgInfo">
-          <div class="info-row"><span class="info-key">WebApp</span><span class="info-val" id="tgAvail">—</span></div>
-          <div class="info-row"><span class="info-key">user_id</span><span class="info-val" id="tgUserId">—</span></div>
-          <div class="info-row"><span class="info-key">username</span><span class="info-val" id="tgUsername">—</span></div>
-          <div class="info-row"><span class="info-key">initData</span><span class="info-val" id="tgInitData">—</span></div>
-          <div class="info-row"><span class="info-key">hash</span><span class="info-val" id="tgHash">—</span></div>
-        </div>
-        <div class="field">
-          <label>Base URL сервера</label>
-          <input type="text" id="baseUrl" value="https://vnqp2xcn-8080.euw.devtunnels.ms/api">
-        </div>
-        <button class="btn" onclick="checkAuth()">Проверить авторизацию на сервере</button>
-      </div>
-
-      <!-- SEARCH IMSI -->
-      <div id="pane-searchIMSI" style="display:none">
-        <div class="panel-title">GET /search?imsi=…</div>
-        <div class="form-grid">
-          <div class="field">
-            <label>IMSI</label>
-            <input type="text" id="searchImsiVal" placeholder="250018707381530">
-          </div>
-        </div>
-        <button class="btn" onclick="searchByIMSI()">Отправить</button>
-      </div>
-
-      <!-- SEARCH IMEI -->
-      <div id="pane-searchIMEI" style="display:none">
-        <div class="panel-title">GET /search?imei=…</div>
-        <div class="form-grid">
-          <div class="field">
-            <label>IMEI</label>
-            <input type="text" id="searchImeiVal" placeholder="353312113249201">
-          </div>
-        </div>
-        <button class="btn" onclick="searchByIMEI()">Отправить</button>
-      </div>
-
-      <!-- SUGGEST -->
-      <div id="pane-suggest" style="display:none">
-        <div class="panel-title">GET /search/suggest?q=…&kind=…</div>
-        <div class="form-grid">
-          <div class="field">
-            <label>Префикс (q)</label>
-            <input type="text" id="suggestQ" placeholder="25001">
-          </div>
-          <div class="field">
-            <label>Тип (kind)</label>
-            <select id="suggestKind">
-              <option value="imsi">imsi</option>
-              <option value="imei">imei</option>
-            </select>
-          </div>
-        </div>
-        <button class="btn" onclick="suggest()">Отправить</button>
-      </div>
-
-      <!-- UPLOAD PARAMETR -->
-      <div id="pane-uploadParametr" style="display:none">
-        <div class="panel-title">POST /upload/parametr</div>
-        <div class="form-grid">
-          <div class="field">
-            <label>CSV файл</label>
-            <input type="file" id="fileParametr" accept=".csv">
-          </div>
-        </div>
-        <button class="btn" onclick="uploadParametr()">Загрузить</button>
-      </div>
-
-      <!-- UPLOAD RK -->
-      <div id="pane-uploadRK" style="display:none">
-        <div class="panel-title">POST /upload/rk</div>
-        <div class="form-grid">
-          <div class="field">
-            <label>CSV файл</label>
-            <input type="file" id="fileRK" accept=".csv">
-          </div>
-        </div>
-        <button class="btn" onclick="uploadRK()">Загрузить</button>
-      </div>
-
+<div id="overlay">
+  <div id="searchBox">
+    <div class="search-wrap">
+      <span class="search-type-tag" id="typeTag" onclick="toggleType()">IMSI</span>
+      <input class="search-input" id="searchInput" type="text" inputmode="numeric"
+        autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Введите номер...">
+      <svg class="search-icon" id="searchIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
     </div>
-
-    <!-- RESPONSE -->
-    <div class="panel">
-      <div class="panel-title">Ответ</div>
-      <div class="resp-meta" id="respMeta">
-        <span class="resp-status" id="respStatus"></span>
-        <span class="resp-time"   id="respTime"></span>
-        <span class="resp-url"    id="respUrl"></span>
-      </div>
-      <pre id="respBody"><div class="empty">// ответ появится здесь</div></pre>
+    <div class="suggest-list" id="suggestList">
+      <div class="search-loading" id="searchLoading">поиск...</div>
     </div>
   </div>
-</main>
+</div>
+
+<div id="sheet" class="hidden">
+  <div class="sheet-handle" onclick="toggleSheet()"></div>
+  <div class="sheet-header" onclick="toggleSheet()">
+    <div class="sheet-title" id="sheetTitle">Наблюдения</div>
+    <div class="sheet-meta"  id="sheetMeta"></div>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<div id="toast"></div>
 
 <script>
-// ── Telegram WebApp init ──────────────────────────────────────────
+const BASE_URL = '/api';
+
 const tg = window.Telegram?.WebApp;
 let initData = '';
-
 if (tg) {
   tg.ready();
   tg.expand();
+  tg.disableVerticalSwipes();
+  tg.setHeaderColor('#080b10');
+  tg.setBackgroundColor('#080b10');
   initData = tg.initData || '';
-
-  const u = tg.initDataUnsafe?.user;
-  set('tgAvail',    'доступен', 'ok');
-  set('tgUserId',   u?.id       ?? '—');
-  set('tgUsername', u?.username ?? '—');
-
-  if (initData) {
-    const params = new URLSearchParams(initData);
-    set('tgInitData', initData.slice(0, 60) + '…');
-    set('tgHash',     params.get('hash')?.slice(0, 16) + '…');
-  } else {
-    set('tgInitData', 'пусто', 'err');
-    set('tgHash',     '—');
-  }
-} else {
-  set('tgAvail',    'недоступен (не Telegram)', 'err');
-  set('tgInitData', 'запустите из Telegram', 'err');
 }
 
-function set(id, val, cls) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = val;
-  if (cls) el.className = 'info-val ' + cls;
+function authHeaders() { return { 'X-Telegram-Init-Data': initData }; }
+
+const map = L.map('map', { center: [55.75, 37.62], zoom: 10, zoomControl: false, attributionControl: false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let searchType = 'imsi', suggestTimer = null, markers = [], polyline = null;
+let sheetState = 'hidden', activeMarkerIdx = -1;
+
+// переключение типа по тапу на тег
+function toggleType() {
+  searchType = searchType === 'imsi' ? 'imei' : 'imsi';
+  document.getElementById('typeTag').textContent = searchType.toUpperCase();
+  document.getElementById('searchInput').placeholder = `Введите ${searchType.toUpperCase()}...`;
+  closeSuggest();
+  const v = document.getElementById('searchInput').value.trim();
+  if (v.length >= 3) triggerSuggest(v);
 }
 
-// ── Навигация ─────────────────────────────────────────────────────
-const panes = ['auth','searchIMSI','searchIMEI','suggest','uploadParametr','uploadRK'];
+const input = document.getElementById('searchInput');
 
-function show(name) {
-  panes.forEach(p => {
-    document.getElementById('pane-' + p).style.display = p === name ? '' : 'none';
-  });
-  document.querySelectorAll('.nav-btn').forEach((b, i) => {
-    b.classList.toggle('active', panes[i] === name);
-  });
+input.addEventListener('focus', () => document.getElementById('overlay').classList.add('top'));
+
+input.addEventListener('input', () => {
+  const v = input.value.trim();
+  document.getElementById('searchClear').classList.toggle('show', v.length > 0);
+  document.getElementById('searchIcon').style.display = v ? 'none' : 'block';
+  clearTimeout(suggestTimer);
+  if (v.length < 3) { closeSuggest(); return; }
+  suggestTimer = setTimeout(() => triggerSuggest(v), 280);
+});
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const v = input.value.trim(); if (v.length >= 5) doSearch(v); }
+});
+
+function clearSearch() {
+  input.value = ''; input.disabled = false; input.style.color = '';
+  document.getElementById('searchClear').classList.remove('show');
+  document.getElementById('searchIcon').style.display = 'block';
+  document.getElementById('overlay').classList.remove('top');
+  document.getElementById('typeTag').style.display = 'block';
+  closeSuggest(); clearResults();
 }
 
-// ── Helpers ───────────────────────────────────────────────────────
-function base() { return document.getElementById('baseUrl').value.replace(/\/$/, ''); }
-
-function authHeaders() {
-  return { 'X-Telegram-Init-Data': initData };
-}
-
-function showResp(status, ms, url, text) {
-  const meta = document.getElementById('respMeta');
-  meta.style.display = 'flex';
-  const st = document.getElementById('respStatus');
-  st.textContent = status || 'ERR';
-  st.className = 'resp-status ' + (status >= 200 && status < 300 ? 'ok' : 'err');
-  document.getElementById('respTime').textContent = ms + ' ms';
-  document.getElementById('respUrl').textContent  = url;
-  document.getElementById('respBody').innerHTML   = highlight(text);
-
-  const dot = document.getElementById('dot');
-  const lbl = document.getElementById('dotLabel');
-  if (status >= 200 && status < 300) {
-    dot.className = 'dot ok'; lbl.textContent = 'OK';
-  } else {
-    dot.className = 'dot err'; lbl.textContent = status || 'ERR';
-  }
-}
-
-async function get(url) {
-  const t0 = Date.now();
+async function triggerSuggest(q) {
+  const loading = document.getElementById('searchLoading');
+  const list    = document.getElementById('suggestList');
+  list.classList.add('open'); loading.classList.add('show');
+  Array.from(list.querySelectorAll('.suggest-item')).forEach(el => el.remove());
   try {
-    const r = await fetch(url, { headers: authHeaders() });
-    const ms = Date.now() - t0;
-    const text = await r.text();
-    let pretty;
-    try { pretty = JSON.stringify(JSON.parse(text), null, 2); }
-    catch { pretty = text; }
-    showResp(r.status, ms, url, pretty);
-  } catch(e) {
-    showResp(0, Date.now() - t0, url, '// сетевая ошибка: ' + e.message);
-  }
-}
-
-// ── Handlers ──────────────────────────────────────────────────────
-async function checkAuth() {
-  // проверяем авторизацию через /search с заведомо несуществующим imsi
-  await get(base() + '/search?imsi=debug_auth_check');
-}
-
-async function searchByIMSI() {
-  const v = document.getElementById('searchImsiVal').value.trim();
-  if (!v) return;
-  await get(base() + '/search?imsi=' + encodeURIComponent(v));
-}
-
-async function searchByIMEI() {
-  const v = document.getElementById('searchImeiVal').value.trim();
-  if (!v) return;
-  await get(base() + '/search?imei=' + encodeURIComponent(v));
-}
-
-async function suggest() {
-  const q    = document.getElementById('suggestQ').value.trim();
-  const kind = document.getElementById('suggestKind').value;
-  if (!q) return;
-  await get(`${base()}/search/suggest?q=${encodeURIComponent(q)}&kind=${kind}`);
-}
-
-async function uploadParametr() {
-  const input = document.getElementById('fileParametr');
-  if (!input.files.length) return;
-  const fd = new FormData();
-  fd.append('file', input.files[0]);
-  await upload(base() + '/upload/parametr', fd);
-}
-
-async function uploadRK() {
-  const input = document.getElementById('fileRK');
-  if (!input.files.length) return;
-  const fd = new FormData();
-  fd.append('file', input.files[0]);
-  await upload(base() + '/upload/rk', fd);
-}
-
-async function upload(url, fd) {
-  const t0 = Date.now();
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: fd,
+    const r = await fetch(`${BASE_URL}/search/suggest?q=${encodeURIComponent(q)}&kind=${searchType}`, { headers: authHeaders() });
+    const data = await r.json();
+    loading.classList.remove('show');
+    if (!data || !data.length) { list.classList.remove('open'); return; }
+    data.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'suggest-item';
+      el.innerHTML = `<span class="suggest-icon">◈</span>${item.value}`;
+      el.addEventListener('click', () => {
+        input.value = item.value;
+        document.getElementById('searchClear').classList.add('show');
+        closeSuggest(); doSearch(item.value);
+      });
+      list.appendChild(el);
     });
-    const ms = Date.now() - t0;
-    const text = await r.text();
-    let pretty;
-    try { pretty = JSON.stringify(JSON.parse(text), null, 2); }
-    catch { pretty = text; }
-    showResp(r.status, ms, url, pretty);
-  } catch(e) {
-    showResp(0, Date.now() - t0, url, '// сетевая ошибка: ' + e.message);
-  }
+  } catch { loading.classList.remove('show'); list.classList.remove('open'); }
 }
 
-function highlight(str) {
-  return str
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"([^"]+)":/g, '<span style="color:#88aaff">"$1"</span>:')
-    .replace(/: "([^"]*)"/g, ': <span style="color:#00ff9d">"$1"</span>')
-    .replace(/: (\d+\.?\d*)/g, ': <span style="color:#ff8c69">$1</span>')
-    .replace(/: (true|false|null)/g, ': <span style="color:#cc88ff">$1</span>');
+function closeSuggest() {
+  const list = document.getElementById('suggestList');
+  list.classList.remove('open');
+  document.getElementById('searchLoading').classList.remove('show');
+  Array.from(list.querySelectorAll('.suggest-item')).forEach(el => el.remove());
 }
+
+async function doSearch(value) {
+  closeSuggest(); input.blur(); showToast('поиск...', 0);
+  try {
+    const param = searchType === 'imsi' ? 'imsi' : 'imei';
+    const r = await fetch(`${BASE_URL}/search?${param}=${encodeURIComponent(value)}`, { headers: authHeaders() });
+    if (r.status === 404) { showToast('не найдено'); return; }
+    if (r.status === 401 || r.status === 403) { showToast('нет доступа'); return; }
+    if (!r.ok) { showToast('ошибка сервера'); return; }
+    const data = await r.json();
+    hideToast();
+    input.disabled = true;
+    document.getElementById('searchIcon').style.display = 'none';
+    document.getElementById('typeTag').style.display = 'none';
+    document.getElementById('searchClear').classList.add('show');
+    renderResults(data);
+  } catch { showToast('ошибка соединения'); }
+}
+
+function renderResults(data) {
+  clearMarkersOnly();
+  document.getElementById('map').classList.add('active');
+  const sightings = [...(data.SightingsParametr || []), ...(data.SightingsRK || [])]
+    .sort((a, b) => new Date(a.SeenAt) - new Date(b.SeenAt));
+  const points = sightings.filter(s => s.Lat && s.Lon).map(s => [s.Lat, s.Lon]);
+  if (points.length > 1) {
+    polyline = L.polyline(points, { color: 'rgba(0,200,255,0.35)', weight: 2, dashArray: '6 4' }).addTo(map);
+  }
+  sightings.forEach((s, i) => {
+    if (!s.Lat || !s.Lon) return;
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="custom-marker" id="marker-${i}"><span>${i+1}</span></div>`,
+      iconSize: [32, 32], iconAnchor: [16, 32],
+    });
+    const m = L.marker([s.Lat, s.Lon], { icon }).addTo(map);
+    m.on('click', () => selectSighting(i));
+    markers.push({ marker: m, idx: i });
+  });
+  if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: 15 });
+  buildSheet(sightings);
+  setSheet('peek');
+}
+
+function clearMarkersOnly() {
+  markers.forEach(m => map.removeLayer(m.marker)); markers = [];
+  if (polyline) { map.removeLayer(polyline); polyline = null; }
+  activeMarkerIdx = -1;
+}
+
+function clearResults() {
+  clearMarkersOnly();
+  document.getElementById('map').classList.remove('active');
+  setSheet('hidden');
+}
+
+function buildSheet(sightings) {
+  const body = document.getElementById('sheetBody');
+  body.innerHTML = '';
+  const withCoords = sightings.filter(s => s.Lat && s.Lon).length;
+  document.getElementById('sheetTitle').textContent = 'Наблюдения';
+  document.getElementById('sheetMeta').textContent  = `${sightings.length} записей · ${withCoords} с координатами`;
+  sightings.forEach((s, i) => {
+    const date     = new Date(s.SeenAt);
+    const time     = date.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dayStr   = date.toLocaleDateString('ru', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const std      = (s.Standart || '').toLowerCase();
+    const badgeCls = ['gsm','umts','lte','2g','3g','4g'].includes(std) ? 'badge-'+std : '';
+    const coordsHtml = (s.Lat && s.Lon) ? `${s.Lat.toFixed(5)}<br>${s.Lon.toFixed(5)}` : '<span style="opacity:.3">—</span>';
+    const el = document.createElement('div');
+    el.className = 'sighting'; el.id = `sighting-${i}`;
+    el.innerHTML = `
+      <div class="sighting-num">${i+1}</div>
+      <div class="sighting-main">
+        <div class="sighting-time">${time} · ${dayStr}</div>
+        <div class="sighting-detail">${s.Operator || '—'} · ${s.Event || '—'}</div>
+        ${s.Standart ? `<span class="sighting-badge ${badgeCls}">${s.Standart}</span>` : ''}
+      </div>
+      <div class="sighting-coords">${coordsHtml}</div>`;
+    el.addEventListener('click', () => selectSighting(i));
+    body.appendChild(el);
+  });
+}
+
+function selectSighting(i) {
+  document.getElementById(`marker-${activeMarkerIdx}`)?.classList.remove('active');
+  document.getElementById(`sighting-${activeMarkerIdx}`)?.classList.remove('active');
+  activeMarkerIdx = i;
+  document.getElementById(`marker-${i}`)?.classList.add('active');
+  const row = document.getElementById(`sighting-${i}`);
+  if (row) { row.classList.add('active'); row.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  const m = markers.find(m => m.idx === i);
+  if (m) map.flyTo(m.marker.getLatLng(), 15, { duration: .8 });
+  setSheet('half');
+}
+
+function setSheet(s) { sheetState = s; document.getElementById('sheet').className = s; }
+
+function toggleSheet() {
+  if (sheetState === 'peek') setSheet('half');
+  else if (sheetState === 'half') setSheet('full');
+  else if (sheetState === 'full') setSheet('peek');
+}
+
+let touchStartY = 0, touchingSheet = false;
+document.getElementById('sheet').addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; touchingSheet = true; }, { passive: true });
+document.getElementById('sheet').addEventListener('touchend', e => {
+  if (!touchingSheet) return; touchingSheet = false;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (dy < -40) { if (sheetState === 'peek') setSheet('half'); else if (sheetState === 'half') setSheet('full'); }
+  else if (dy > 40) { if (sheetState === 'full') setSheet('half'); else if (sheetState === 'half') setSheet('peek'); }
+}, { passive: true });
+document.getElementById('map').addEventListener('touchstart', () => { touchingSheet = false; }, { passive: true });
+
+let toastTimer = null;
+function showToast(msg, duration = 3000) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); if (duration > 0) toastTimer = setTimeout(hideToast, duration);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+document.addEventListener('click', e => { if (!document.getElementById('searchBox').contains(e.target)) closeSuggest(); });
 </script>
 </body>
 </html>
