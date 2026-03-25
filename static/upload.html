@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMSI Bot — Загрузка данных</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Unbounded:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #00ff9d;
+    --accent2: #ff3e6c;
+    --accent3: #3e8bff;
+    --text: #c8c8d8;
+    --text-dim: #555570;
+    --radius: 6px;
+    --mono: 'JetBrains Mono', monospace;
+    --head: 'Unbounded', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 40px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.06) 2px, rgba(0,0,0,.06) 4px);
+    pointer-events: none; z-index: 1000;
+  }
+
+  header {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 8px;
+    text-align: center;
+  }
+
+  .logo { font-family: var(--head); font-size: 16px; letter-spacing: .15em; color: var(--accent); }
+  .subtitle { font-size: 11px; color: var(--text-dim); letter-spacing: .1em; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 680px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: rgba(0,255,157,.2); }
+
+  .card-title {
+    font-family: var(--head);
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .card-badge {
+    font-size: 9px; padding: 2px 6px;
+    border-radius: 3px; font-weight: 700;
+  }
+  .badge-p { background: rgba(62,139,255,.15); color: var(--accent3); }
+  .badge-r { background: rgba(0,255,157,.12);  color: var(--accent); }
+
+  .card-desc {
+    font-size: 11px; color: var(--text-dim); line-height: 1.7;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+
+  label { font-size: 10px; letter-spacing: .1em; color: var(--text-dim); text-transform: uppercase; }
+
+  .drop-zone {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    position: relative;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .drop-zone:hover, .drop-zone.over {
+    border-color: rgba(0,255,157,.4);
+    background: rgba(0,255,157,.04);
+    color: var(--accent);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-zone .file-name {
+    margin-top: 4px; font-size: 11px;
+    color: var(--accent); display: none;
+  }
+
+  .key-field { position: relative; }
+  input[type=text], input[type=password] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    outline: none;
+    transition: border-color .15s;
+    width: 100%;
+  }
+  input:focus { border-color: rgba(0,255,157,.35); }
+
+  .btn {
+    padding: 10px 18px;
+    border: 1px solid var(--accent);
+    background: rgba(0,255,157,.08);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 600;
+    letter-spacing: .07em;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all .15s;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn:hover { background: rgba(0,255,157,.16); }
+  .btn:active { transform: scale(.99); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .progress {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    overflow: hidden;
+    display: none;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width .3s;
+    border-radius: 1px;
+  }
+  .progress.active { display: block; }
+  .progress.indeterminate .progress-bar {
+    animation: indeterminate 1.4s ease infinite;
+    width: 40%;
+  }
+  @keyframes indeterminate {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+
+  .result {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    font-size: 12px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .result.ok  { border-color: rgba(0,255,157,.3); }
+  .result.err { border-color: rgba(255,62,108,.3); }
+  .result.show { display: flex; }
+
+  .result-row { display: flex; gap: 8px; }
+  .result-key { color: var(--text-dim); min-width: 80px; }
+  .result-val { color: var(--text); }
+  .result-val.green { color: var(--accent); }
+  .result-val.red   { color: var(--accent2); }
+
+  /* config panel */
+  .config-panel {
+    width: 100%; max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .config-title {
+    font-size: 10px; letter-spacing: .12em;
+    color: var(--text-dim); text-transform: uppercase;
+  }
+
+  .config-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">IMSI Bot</div>
+  <div class="subtitle">Загрузка данных / Internal API</div>
+</header>
+
+<!-- Config -->
+<div class="config-panel">
+  <div class="config-title">Конфигурация</div>
+  <div class="config-row">
+    <div class="field">
+      <label>Base URL</label>
+      <input type="text" id="baseUrl" value="http://localhost:8080/internal">
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" id="apiKey" placeholder="your_secret_api_key_here">
+    </div>
+  </div>
+</div>
+
+<!-- Cards -->
+<div class="cards">
+
+  <!-- PARAMETR -->
+  <div class="card">
+    <div class="card-title">
+      <span class="card-badge badge-p">PARAMETR</span>
+      Файл параметр
+    </div>
+    <div class="card-desc">
+      Файл с заголовком.<br>
+      Содержит устройства и локации.
+    </div>
+    <div class="field">
+      <label>CSV файл</label>
+      <div class="drop-zone" id="dropP" ondragover="onDragOver(event,'dropP')" ondragleave="onDragLeave('dropP')" ondrop="onDrop(event,'fileP','dropP')">
+        <input type="file" id="fileP" accept=".csv" onchange="onFileChange('fileP','dropP')">
+        Перетащите файл или нажмите
+        <div class="file-name" id="nameP"></div>
+      </div>
+    </div>
+    <div class="progress" id="progP"><div class="progress-bar" id="barP"></div></div>
+    <button class="btn" id="btnP" onclick="upload('parametr')">Загрузить</button>
+    <div class="result" id="resP"></div>
+  </div>
+
+  <!-- RK -->
+  <div class="card">
+    <div class="card-title">
+      <span class="card-badge badge-r">RK</span>
+      Файл РК
+    </div>
+    <div class="card-desc">
+      Файл без заголовка.<br>
+      Содержит устройства с координатами.
+    </div>
+    <div class="field">
+      <label>CSV файл</label>
+      <div class="drop-zone" id="dropR" ondragover="onDragOver(event,'dropR')" ondragleave="onDragLeave('dropR')" ondrop="onDrop(event,'fileR','dropR')">
+        <input type="file" id="fileR" accept=".csv" onchange="onFileChange('fileR','dropR')">
+        Перетащите файл или нажмите
+        <div class="file-name" id="nameR"></div>
+      </div>
+    </div>
+    <div class="progress" id="progR"><div class="progress-bar" id="barR"></div></div>
+    <button class="btn" id="btnR" onclick="upload('rk')">Загрузить</button>
+    <div class="result" id="resR"></div>
+  </div>
+
+</div>
+
+<script>
+function base() { return document.getElementById('baseUrl').value.replace(/\/$/, ''); }
+function key()  { return document.getElementById('apiKey').value; }
+
+// drag & drop
+function onDragOver(e, id)  { e.preventDefault(); document.getElementById(id).classList.add('over'); }
+function onDragLeave(id)    { document.getElementById(id).classList.remove('over'); }
+function onDrop(e, fileId, dropId) {
+  e.preventDefault();
+  onDragLeave(dropId);
+  const input = document.getElementById(fileId);
+  const dt = e.dataTransfer;
+  if (dt.files.length) {
+    // DataTransfer -> input
+    const file = dt.files[0];
+    const dtp = new DataTransfer();
+    dtp.items.add(file);
+    input.files = dtp.files;
+    showName(fileId, dropId, file.name);
+  }
+}
+function onFileChange(fileId, dropId) {
+  const input = document.getElementById(fileId);
+  if (input.files.length) showName(fileId, dropId, input.files[0].name);
+}
+function showName(fileId, dropId, name) {
+  const drop = document.getElementById(dropId);
+  const suffix = fileId === 'fileP' ? 'P' : 'R';
+  const nm = document.getElementById('name' + suffix);
+  nm.textContent = name;
+  nm.style.display = 'block';
+  drop.querySelector('input').style.opacity = '0';
+}
+
+async function upload(kind) {
+  const isP    = kind === 'parametr';
+  const fileEl = document.getElementById(isP ? 'fileP' : 'fileR');
+  const btn    = document.getElementById(isP ? 'btnP' : 'btnR');
+  const prog   = document.getElementById(isP ? 'progP' : 'progR');
+  const res    = document.getElementById(isP ? 'resP'  : 'resR');
+
+  if (!fileEl.files.length) {
+    showResult(res, false, { error: 'выберите файл' });
+    return;
+  }
+  if (!key()) {
+    showResult(res, false, { error: 'введите API Key' });
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('file', fileEl.files[0]);
+
+  btn.disabled = true;
+  prog.className = 'progress active indeterminate';
+  res.className = 'result';
+
+  const url = `${base()}/upload/${kind}`;
+
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('X-API-Key', key());
+
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) {
+        prog.classList.remove('indeterminate');
+        document.getElementById(isP ? 'barP' : 'barR').style.width =
+          Math.round(e.loaded / e.total * 100) + '%';
+      }
+    };
+
+    xhr.onload = () => {
+      btn.disabled = false;
+      prog.className = 'progress';
+      let data;
+      try { data = JSON.parse(xhr.responseText); }
+      catch { data = { error: xhr.responseText }; }
+      showResult(res, xhr.status >= 200 && xhr.status < 300, data);
+    };
+
+    xhr.onerror = () => {
+      btn.disabled = false;
+      prog.className = 'progress';
+      showResult(res, false, { error: 'сетевая ошибка' });
+    };
+
+    xhr.send(fd);
+  } catch(e) {
+    btn.disabled = false;
+    prog.className = 'progress';
+    showResult(res, false, { error: e.message });
+  }
+}
+
+function showResult(el, ok, data) {
+  el.className = 'result show ' + (ok ? 'ok' : 'err');
+  el.innerHTML = '';
+
+  if (ok) {
+    const rows = [
+      ['devices',   data.devices,   'green'],
+      ['locations', data.locations, 'green'],
+      ['sightings', data.sightings, 'green'],
+      ['skipped',   data.skipped,   data.skipped > 0 ? 'red' : 'green'],
+    ].filter(r => r[1] !== undefined);
+
+    rows.forEach(([k, v, cls]) => {
+      el.innerHTML += `
+        <div class="result-row">
+          <span class="result-key">${k}</span>
+          <span class="result-val ${cls}">${v}</span>
+        </div>`;
+    });
+  } else {
+    el.innerHTML = `<div class="result-row">
+      <span class="result-key">ошибка</span>
+      <span class="result-val red">${data.error || 'неизвестная ошибка'}</span>
+    </div>`;
+  }
+}
+
+// restore saved values
+const savedKey = localStorage.getItem('apiKey');
+const savedUrl = localStorage.getItem('internalUrl');
+if (savedKey) document.getElementById('apiKey').value = savedKey;
+if (savedUrl) document.getElementById('baseUrl').value = savedUrl;
+
+document.getElementById('apiKey').addEventListener('change', e => localStorage.setItem('apiKey', e.target.value));
+document.getElementById('baseUrl').addEventListener('change', e => localStorage.setItem('internalUrl', e.target.value));
+</script>
+</body>
+</html>

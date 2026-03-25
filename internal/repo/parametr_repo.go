@@ -80,12 +80,18 @@ func (r *ParametrRepo) InsertSighting(ctx context.Context, s SightingParametr) e
 // ordered by time ascending.
 func (r *ParametrRepo) FindSightingsByDeviceID(ctx context.Context, deviceID int64) ([]SightingParametr, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, device_id, seen_at,
-		       COALESCE(standart, ''), COALESCE(operator, ''), COALESCE(event, ''),
-		       location_id
-		FROM sightings_parametr
-		WHERE device_id = $1
-		ORDER BY seen_at ASC`,
+		SELECT 
+			s.id, s.device_id, s.seen_at,
+			COALESCE(s.standart, ''), 
+			COALESCE(s.operator, ''), 
+			COALESCE(s.event, ''),
+			s.location_id,
+			l.lat,
+			l.lon
+		FROM sightings_parametr s
+		LEFT JOIN locations_parametr l ON l.id = s.location_id
+		WHERE s.device_id = $1
+		ORDER BY s.seen_at ASC`,
 		deviceID,
 	)
 	if err != nil {
@@ -99,7 +105,7 @@ func (r *ParametrRepo) FindSightingsByDeviceID(ctx context.Context, deviceID int
 		if err := rows.Scan(
 			&s.ID, &s.DeviceID, &s.SeenAt,
 			&s.Standart, &s.Operator, &s.Event,
-			&s.LocationID,
+			&s.LocationID, &s.Lat, &s.Lon,
 		); err != nil {
 			return nil, err
 		}

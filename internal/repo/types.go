@@ -27,7 +27,9 @@ type SightingParametr struct {
 	Standart   string
 	Operator   string
 	Event      string
-	LocationID *int64 // nil when no nearby location was found
+	LocationID *int64
+	Lat        *float64
+	Lon        *float64
 }
 
 // SightingRK is a subscriber observation from an rk-format file.
