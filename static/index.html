@@ -54,7 +54,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
   pointer-events: all;
 }
 
-/* поле ввода с тегом типа внутри */
 .search-wrap { position: relative; }
 
 .search-type-tag {
@@ -73,9 +72,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
   cursor: pointer;
   user-select: none;
   z-index: 1;
-  transition: background .15s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.search-type-tag:hover { background: rgba(0,200,255,0.25); }
+.search-type-tag.hidden {
+  opacity: 0;
+  transform: translateY(-50%) scale(0.8);
+  pointer-events: none;
+}
 
 .search-input {
   width: 100%;
@@ -88,9 +91,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
   padding: 16px 48px 16px 62px;
   outline: none;
   backdrop-filter: blur(16px);
-  transition: border-color .2s, box-shadow .2s;
+  transition: border-color .2s, box-shadow .2s, padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   -webkit-appearance: none;
 }
+.search-input.no-tag { padding-left: 16px; }
 .search-input::placeholder { color: var(--text-dim); }
 .search-input:focus {
   border-color: rgba(0,200,255,0.4);
@@ -134,28 +138,37 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
   letter-spacing: .04em; border-bottom: 1px solid rgba(0,200,255,0.06);
   transition: background .1s; display: flex; align-items: center; gap: 10px;
 }
-.suggest-item:last-child { border-bottom: none; }
 .suggest-item:hover { background: var(--accent-dim); color: var(--accent); }
 .suggest-icon { font-size: 10px; opacity: .4; }
 .search-loading { padding: 14px 20px; color: var(--text-dim); font-size: 12px; display: none; }
 .search-loading.show { display: block; }
 
-/* sheet */
+/* ОБНОВЛЕННАЯ ШТОРКА */
 #sheet {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
   background: var(--surface); border-top: 1px solid var(--border);
   border-radius: 20px 20px 0 0;
-  transition: transform .35s cubic-bezier(.4,0,.2,1);
-  max-height: 80vh; display: flex; flex-direction: column;
+  height: 85vh;
+  display: flex; flex-direction: column;
   backdrop-filter: blur(20px); padding-bottom: var(--safe-bottom);
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+  will-change: transform;
 }
-#sheet.peek   { transform: translateY(calc(100% - 72px)); }
-#sheet.half   { transform: translateY(40%); }
+/* Классы состояний теперь только для JS-переключения */
+#sheet.peek   { transform: translateY(calc(85vh - 72px)); }
+#sheet.half   { transform: translateY(45vh); }
 #sheet.full   { transform: translateY(0); }
 #sheet.hidden { transform: translateY(100%); }
+#sheet.dragging { transition: none; }
 
-.sheet-handle { width: 36px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; cursor: pointer; }
-.sheet-header { padding: 12px 20px 10px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; cursor: pointer; }
+.sheet-header-area {
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none; /* Важно: отключаем стандартный скролл для заголовка */
+}
+.sheet-handle { width: 36px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; margin: 12px auto 0; }
+.sheet-header { padding: 12px 20px 10px; display: flex; align-items: center; gap: 12px; }
 .sheet-title { font-family: var(--head); font-size: 13px; letter-spacing: .08em; color: var(--text); flex: 1; }
 .sheet-meta { font-size: 11px; color: var(--text-dim); }
 .sheet-body { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
@@ -175,15 +188,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 .badge-gsm  { background: rgba(255,150,50,.12);  color: #ff9632; }
 .badge-umts { background: rgba(100,180,255,.12); color: #64b4ff; }
 .badge-lte  { background: rgba(0,200,255,.12);   color: var(--accent); }
-.badge-2g   { background: rgba(255,150,50,.12);  color: #ff9632; }
-.badge-3g   { background: rgba(100,180,255,.12); color: #64b4ff; }
-.badge-4g   { background: rgba(0,200,255,.12);   color: var(--accent); }
 
-.custom-marker { width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid rgba(0,200,255,0.8); background: rgba(0,200,255,0.25); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(0,200,255,0.4); transition: all .2s; }
+.custom-marker { width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid rgba(0,200,255,0.8); background: rgba(0,200,255,0.25); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(0,200,255,0.4); }
 .custom-marker.active { background: rgba(0,200,255,0.5); box-shadow: 0 0 20px rgba(0,200,255,0.7); }
 .custom-marker span { transform: rotate(45deg); font-size: 10px; font-weight: 700; color: var(--accent); }
 
-#toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(8,11,16,0.95); border: 1px solid var(--border); border-radius: 10px; padding: 10px 20px; font-size: 12px; color: var(--text-dim); z-index: 30; opacity: 0; transition: all .3s ease; pointer-events: none; white-space: nowrap; }
+#toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(8,11,16,0.95); border: 1px solid var(--border); border-radius: 10px; padding: 10px 20px; font-size: 12px; color: var(--text-dim); z-index: 30; opacity: 0; transition: all .3s ease; pointer-events: none; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 ::-webkit-scrollbar { width: 3px; }
@@ -200,7 +210,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
     <div class="search-wrap">
       <span class="search-type-tag" id="typeTag" onclick="toggleType()">IMSI</span>
       <input class="search-input" id="searchInput" type="text" inputmode="numeric"
-        autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Введите номер...">
+        autocomplete="off" placeholder="Введите номер...">
       <svg class="search-icon" id="searchIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
@@ -213,10 +223,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 </div>
 
 <div id="sheet" class="hidden">
-  <div class="sheet-handle" onclick="toggleSheet()"></div>
-  <div class="sheet-header" onclick="toggleSheet()">
-    <div class="sheet-title" id="sheetTitle">Наблюдения</div>
-    <div class="sheet-meta"  id="sheetMeta"></div>
+  <div class="sheet-header-area" id="sheetDragHandle">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title" id="sheetTitle">Наблюдения</div>
+      <div class="sheet-meta"  id="sheetMeta"></div>
+    </div>
   </div>
   <div class="sheet-body" id="sheetBody"></div>
 </div>
@@ -225,40 +237,81 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 
 <script>
 const BASE_URL = '/api';
-
 const tg = window.Telegram?.WebApp;
-let initData = '';
 if (tg) {
   tg.ready();
   tg.expand();
-  tg.disableVerticalSwipes();
+  tg.disableVerticalSwipes(); // Важно для кастомной шторки
   tg.setHeaderColor('#080b10');
   tg.setBackgroundColor('#080b10');
-  initData = tg.initData || '';
 }
 
-function authHeaders() { return { 'X-Telegram-Init-Data': initData }; }
+function authHeaders() { return { 'X-Telegram-Init-Data': tg?.initData || '' }; }
 
 const map = L.map('map', { center: [55.75, 37.62], zoom: 10, zoomControl: false, attributionControl: false });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let searchType = 'imsi', suggestTimer = null, markers = [], polyline = null;
-let sheetState = 'hidden', activeMarkerIdx = -1;
+let activeMarkerIdx = -1;
 
-// переключение типа по тапу на тег
+// --- ЛОГИКА ШТОРКИ (BOTTOM SHEET) ---
+const sheet = document.getElementById('sheet');
+const dragHandle = document.getElementById('sheetDragHandle');
+let startY, startTranslateY, currentTranslateY;
+const vh = window.innerHeight * 0.85;
+const snapPoints = {
+  full: 0,
+  half: window.innerHeight * 0.45,
+  peek: window.innerHeight * 0.85 - 72,
+  hidden: window.innerHeight
+};
+
+function setSheetState(state) {
+  sheet.classList.remove('dragging', 'full', 'half', 'peek', 'hidden');
+  sheet.classList.add(state);
+  sheet.style.transform = ''; // Сбрасываем инлайновый стиль, чтобы работал CSS класс
+}
+
+dragHandle.addEventListener('touchstart', e => {
+  startY = e.touches[0].clientY;
+  const matrix = new WebKitCSSMatrix(window.getComputedStyle(sheet).transform);
+  startTranslateY = matrix.m42;
+  sheet.classList.add('dragging');
+}, { passive: true });
+
+dragHandle.addEventListener('touchmove', e => {
+  const deltaY = e.touches[0].clientY - startY;
+  currentTranslateY = Math.max(0, startTranslateY + deltaY);
+  sheet.style.transform = `translateY(${currentTranslateY}px)`;
+}, { passive: true });
+
+dragHandle.addEventListener('touchend', e => {
+  sheet.classList.remove('dragging');
+  // Находим ближайшую точку притяжения
+  const closest = Object.keys(snapPoints).reduce((a, b) => 
+    Math.abs(snapPoints[a] - currentTranslateY) < Math.abs(snapPoints[b] - currentTranslateY) ? a : b
+  );
+  setSheetState(closest);
+});
+
+// Клик по заголовку просто переключает состояния
+dragHandle.addEventListener('click', () => {
+  if (sheet.classList.contains('peek')) setSheetState('half');
+  else if (sheet.classList.contains('half')) setSheetState('full');
+  else setSheetState('peek');
+});
+
+// --- ПОИСК И ОСТАЛЬНОЕ ---
+
 function toggleType() {
   searchType = searchType === 'imsi' ? 'imei' : 'imsi';
   document.getElementById('typeTag').textContent = searchType.toUpperCase();
   document.getElementById('searchInput').placeholder = `Введите ${searchType.toUpperCase()}...`;
   closeSuggest();
-  const v = document.getElementById('searchInput').value.trim();
-  if (v.length >= 3) triggerSuggest(v);
 }
 
 const input = document.getElementById('searchInput');
-
 input.addEventListener('focus', () => document.getElementById('overlay').classList.add('top'));
-
 input.addEventListener('input', () => {
   const v = input.value.trim();
   document.getElementById('searchClear').classList.toggle('show', v.length > 0);
@@ -273,11 +326,12 @@ input.addEventListener('keydown', e => {
 });
 
 function clearSearch() {
-  input.value = ''; input.disabled = false; input.style.color = '';
+  input.value = ''; input.disabled = false;
+  input.classList.remove('no-tag');
+  document.getElementById('typeTag').classList.remove('hidden');
   document.getElementById('searchClear').classList.remove('show');
   document.getElementById('searchIcon').style.display = 'block';
   document.getElementById('overlay').classList.remove('top');
-  document.getElementById('typeTag').style.display = 'block';
   closeSuggest(); clearResults();
 }
 
@@ -290,26 +344,19 @@ async function triggerSuggest(q) {
     const r = await fetch(`${BASE_URL}/search/suggest?q=${encodeURIComponent(q)}&kind=${searchType}`, { headers: authHeaders() });
     const data = await r.json();
     loading.classList.remove('show');
-    if (!data || !data.length) { list.classList.remove('open'); return; }
+    if (!data?.length) { list.classList.remove('open'); return; }
     data.forEach(item => {
       const el = document.createElement('div');
       el.className = 'suggest-item';
       el.innerHTML = `<span class="suggest-icon">◈</span>${item.value}`;
-      el.addEventListener('click', () => {
-        input.value = item.value;
-        document.getElementById('searchClear').classList.add('show');
-        closeSuggest(); doSearch(item.value);
-      });
+      el.onclick = () => { input.value = item.value; closeSuggest(); doSearch(item.value); };
       list.appendChild(el);
     });
-  } catch { loading.classList.remove('show'); list.classList.remove('open'); }
+  } catch { loading.classList.remove('show'); }
 }
 
 function closeSuggest() {
-  const list = document.getElementById('suggestList');
-  list.classList.remove('open');
-  document.getElementById('searchLoading').classList.remove('show');
-  Array.from(list.querySelectorAll('.suggest-item')).forEach(el => el.remove());
+  document.getElementById('suggestList').classList.remove('open');
 }
 
 async function doSearch(value) {
@@ -317,15 +364,12 @@ async function doSearch(value) {
   try {
     const param = searchType === 'imsi' ? 'imsi' : 'imei';
     const r = await fetch(`${BASE_URL}/search?${param}=${encodeURIComponent(value)}`, { headers: authHeaders() });
-    if (r.status === 404) { showToast('не найдено'); return; }
-    if (r.status === 401 || r.status === 403) { showToast('нет доступа'); return; }
-    if (!r.ok) { showToast('ошибка сервера'); return; }
+    if (!r.ok) { showToast(r.status === 404 ? 'не найдено' : 'ошибка'); return; }
     const data = await r.json();
     hideToast();
     input.disabled = true;
-    document.getElementById('searchIcon').style.display = 'none';
-    document.getElementById('typeTag').style.display = 'none';
-    document.getElementById('searchClear').classList.add('show');
+    input.classList.add('no-tag');
+    document.getElementById('typeTag').classList.add('hidden');
     renderResults(data);
   } catch { showToast('ошибка соединения'); }
 }
@@ -335,67 +379,52 @@ function renderResults(data) {
   document.getElementById('map').classList.add('active');
   const sightings = [...(data.SightingsParametr || []), ...(data.SightingsRK || [])]
     .sort((a, b) => new Date(a.SeenAt) - new Date(b.SeenAt));
+  
   const points = sightings.filter(s => s.Lat && s.Lon).map(s => [s.Lat, s.Lon]);
   if (points.length > 1) {
     polyline = L.polyline(points, { color: 'rgba(0,200,255,0.35)', weight: 2, dashArray: '6 4' }).addTo(map);
   }
+
   sightings.forEach((s, i) => {
     if (!s.Lat || !s.Lon) return;
-    const icon = L.divIcon({
-      className: '',
-      html: `<div class="custom-marker" id="marker-${i}"><span>${i+1}</span></div>`,
-      iconSize: [32, 32], iconAnchor: [16, 32],
-    });
-    const m = L.marker([s.Lat, s.Lon], { icon }).addTo(map);
-    m.on('click', () => selectSighting(i));
+    const m = L.marker([s.Lat, s.Lon], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div class="custom-marker" id="marker-${i}"><span>${i+1}</span></div>`,
+        iconSize: [32, 32], iconAnchor: [16, 32]
+      })
+    }).addTo(map);
+    m.on('click', () => selectSighting(i, sightings));
     markers.push({ marker: m, idx: i });
   });
+
   if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: 15 });
   buildSheet(sightings);
-  setSheet('peek');
-}
-
-function clearMarkersOnly() {
-  markers.forEach(m => map.removeLayer(m.marker)); markers = [];
-  if (polyline) { map.removeLayer(polyline); polyline = null; }
-  activeMarkerIdx = -1;
-}
-
-function clearResults() {
-  clearMarkersOnly();
-  document.getElementById('map').classList.remove('active');
-  setSheet('hidden');
+  setSheetState('peek');
 }
 
 function buildSheet(sightings) {
   const body = document.getElementById('sheetBody');
   body.innerHTML = '';
-  const withCoords = sightings.filter(s => s.Lat && s.Lon).length;
-  document.getElementById('sheetTitle').textContent = 'Наблюдения';
-  document.getElementById('sheetMeta').textContent  = `${sightings.length} записей · ${withCoords} с координатами`;
+  document.getElementById('sheetMeta').textContent = `${sightings.length} зап.`;
   sightings.forEach((s, i) => {
-    const date     = new Date(s.SeenAt);
-    const time     = date.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const dayStr   = date.toLocaleDateString('ru', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const std      = (s.Standart || '').toLowerCase();
-    const badgeCls = ['gsm','umts','lte','2g','3g','4g'].includes(std) ? 'badge-'+std : '';
-    const coordsHtml = (s.Lat && s.Lon) ? `${s.Lat.toFixed(5)}<br>${s.Lon.toFixed(5)}` : '<span style="opacity:.3">—</span>';
+    const date = new Date(s.SeenAt);
+    const time = date.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
     const el = document.createElement('div');
     el.className = 'sighting'; el.id = `sighting-${i}`;
     el.innerHTML = `
       <div class="sighting-num">${i+1}</div>
       <div class="sighting-main">
-        <div class="sighting-time">${time} · ${dayStr}</div>
+        <div class="sighting-time">${time} · ${date.toLocaleDateString('ru')}</div>
         <div class="sighting-detail">${s.Operator || '—'} · ${s.Event || '—'}</div>
-        ${s.Standart ? `<span class="sighting-badge ${badgeCls}">${s.Standart}</span>` : ''}
       </div>
-      <div class="sighting-coords">${coordsHtml}</div>`;
-    el.addEventListener('click', () => selectSighting(i));
+      <div class="sighting-coords">${s.Lat ? s.Lat.toFixed(4) : ''}</div>`;
+    el.onclick = () => selectSighting(i, sightings);
     body.appendChild(el);
   });
 }
 
-function selectSighting(i) {
+function selectSighting(i, sightings) {
   document.getElementById(`marker-${activeMarkerIdx}`)?.classList.remove('active');
   document.getElementById(`sighting-${activeMarkerIdx}`)?.classList.remove('active');
   activeMarkerIdx = i;
@@ -403,32 +432,24 @@ function selectSighting(i) {
   const row = document.getElementById(`sighting-${i}`);
   if (row) { row.classList.add('active'); row.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
   const m = markers.find(m => m.idx === i);
-  if (m) map.flyTo(m.marker.getLatLng(), 15, { duration: .8 });
-  setSheet('half');
+  if (m) map.flyTo(m.marker.getLatLng(), 15);
+  setSheetState('half');
 }
 
-function setSheet(s) { sheetState = s; document.getElementById('sheet').className = s; }
-
-function toggleSheet() {
-  if (sheetState === 'peek') setSheet('half');
-  else if (sheetState === 'half') setSheet('full');
-  else if (sheetState === 'full') setSheet('peek');
+function clearMarkersOnly() {
+  markers.forEach(m => map.removeLayer(m.marker)); markers = [];
+  if (polyline) map.removeLayer(polyline); polyline = null;
 }
 
-let touchStartY = 0, touchingSheet = false;
-document.getElementById('sheet').addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; touchingSheet = true; }, { passive: true });
-document.getElementById('sheet').addEventListener('touchend', e => {
-  if (!touchingSheet) return; touchingSheet = false;
-  const dy = e.changedTouches[0].clientY - touchStartY;
-  if (dy < -40) { if (sheetState === 'peek') setSheet('half'); else if (sheetState === 'half') setSheet('full'); }
-  else if (dy > 40) { if (sheetState === 'full') setSheet('half'); else if (sheetState === 'half') setSheet('peek'); }
-}, { passive: true });
-document.getElementById('map').addEventListener('touchstart', () => { touchingSheet = false; }, { passive: true });
+function clearResults() {
+  clearMarkersOnly();
+  document.getElementById('map').classList.remove('active');
+  setSheetState('hidden');
+}
 
-let toastTimer = null;
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); if (duration > 0) toastTimer = setTimeout(hideToast, duration);
+  if (duration > 0) setTimeout(hideToast, duration);
 }
 function hideToast() { document.getElementById('toast').classList.remove('show'); }
 
