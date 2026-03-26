@@ -12,25 +12,14 @@ import (
 // every row. fn receives a *Device and/or *Location (one or both may be nil).
 // This avoids loading the entire file into memory.
 func ParseStream(r io.Reader, fn func(d *Device, l *Location) error) error {
-	csvReader, err := newParametrReader(r)
-	if err != nil {
-		return err
-	}
+	csvReader := newCSVReader(r)
 
 	headers, err := csvReader.Read()
 	if err != nil {
 		return fmt.Errorf("reading header: %w", err)
 	}
 	headers = sanitiseHeaders(headers)
-
-	idx := buildIndex(headers)
-
-	required := []string{"id", "date", "imei", "imsi", "event", "lat", "lon"}
-	for _, f := range required {
-		if _, ok := idx[f]; !ok {
-			return fmt.Errorf("required column not found for field %q (check columnMap in types.go)", f)
-		}
-	}
+	idxMap := buildIndex(headers)
 
 	lineNum := 1
 	for {
@@ -43,19 +32,33 @@ func ParseStream(r io.Reader, fn func(d *Device, l *Location) error) error {
 			return fmt.Errorf("line %d: %w", lineNum, err)
 		}
 
-		id := cell(row, idx["id"])
-		date := cell(row, idx["date"])
-		imsi := cell(row, idx["imsi"])
-		imei := cell(row, idx["imei"])
-		lat := cell(row, idx["lat"])
-		lon := cell(row, idx["lon"])
-		standart := cell(row, idx["standart"])
-		operator := cell(row, idx["operator"])
-		event := cell(row, idx["event"])
+		// Извлекаем базовые поля
+		id := cell(row, idxMap["id"])
+		date := cell(row, idxMap["date"])
+		imsi := cell(row, idxMap["imsi"])
+		imei := cell(row, idxMap["imei"])
+		standart := cell(row, idxMap["standart"])
+		operator := cell(row, idxMap["operator"])
+		event := cell(row, idxMap["event"])
+
+		// 1. Сначала проверяем стандартные колонки Широта_1 / Долгота_1
+		lat := cell(row, idxMap["lat"])
+		lon := cell(row, idxMap["lon"])
+
+		// 2. Если там пусто, сканируем всю строку (особенно хвост для "Служебных сообщений")
+		// В твоем дампе координаты были в районе 70+ колонки.
+		if (lat == "" || lat == "0") && len(row) > 15 {
+			foundLat, foundLon := findCoordinatesInRow(row)
+			if foundLat != "" {
+				lat = foundLat
+				lon = foundLon
+			}
+		}
 
 		var d *Device
 		var l *Location
 
+		// Устройство создаем, если есть хоть какой-то идентификатор
 		if imsi != "" || (imei != "" && imei != "closed") {
 			d = &Device{
 				ID:       id,
@@ -68,6 +71,7 @@ func ParseStream(r io.Reader, fn func(d *Device, l *Location) error) error {
 			}
 		}
 
+		// Локацию создаем только если координаты валидны
 		if lat != "" && lat != "0" && lon != "" && lon != "0" {
 			l = &Location{
 				ID:   id,
@@ -77,14 +81,35 @@ func ParseStream(r io.Reader, fn func(d *Device, l *Location) error) error {
 			}
 		}
 
+		// Вызываем колбэк, если нашли хоть что-то
 		if d != nil || l != nil {
 			if err := fn(d, l); err != nil {
 				return err
 			}
 		}
 	}
-
 	return nil
+}
+
+// findCoordinatesInRow ищет две идущие подряд колонки с точками (формат координат)
+func findCoordinatesInRow(row []string) (string, string) {
+	// Идем с конца, так как в "Служебных сообщениях" координаты в самом хвосте
+	for i := len(row) - 1; i > 0; i-- {
+		curr := strings.TrimSpace(row[i])
+		prev := strings.TrimSpace(row[i-1])
+
+		// Координата обычно содержит точку и имеет длину больше 5 символов (напр. 56.123)
+		if strings.Contains(curr, ".") && strings.Contains(prev, ".") {
+			if len(curr) > 5 && len(prev) > 5 {
+				// Простейшая проверка, что это не другие данные (например, IP или версии)
+				// Широта в РФ обычно начинается на 4, 5, 6, 7 или 8.
+				if strings.HasPrefix(prev, "5") || strings.HasPrefix(prev, "6") {
+					return prev, curr
+				}
+			}
+		}
+	}
+	return "", ""
 }
 
 // Parse reads a semicolon-delimited source CSV from r and returns a

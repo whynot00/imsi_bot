@@ -1,6 +1,9 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: imsi_db
     restart: unless-stopped
     env_file:
       - .env
@@ -13,6 +16,23 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: imsi_app
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080" # Внешний порт : Внутренний порт приложения
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:

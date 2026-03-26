@@ -17,14 +17,14 @@ import (
 )
 
 const (
-	locationTolerance = 5 * time.Minute
+	locationTolerance = 1 * time.Hour
 	flushSize         = 1000  // rows per batch INSERT
 	txChunkSize       = 10000 // rows per transaction commit
 )
 
 // Progress reports live import state to the caller.
 type Progress struct {
-	Phase     string `json:"phase"`     // "locations", "devices", "done"
+	Phase     string `json:"phase"` // "locations", "devices", "done"
 	Devices   int    `json:"devices"`
 	Locations int    `json:"locations"`
 	Sightings int    `json:"sightings"`
