@@ -79,4 +79,17 @@ CREATE TABLE users (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- -----------------------------------------------------------------
+-- allowed_ips
+-- -----------------------------------------------------------------
+CREATE TABLE allowed_ips (
+    id         BIGSERIAL PRIMARY KEY,
+    ip         TEXT      NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- seed initial IPs (localhost always allowed in middleware)
+INSERT INTO allowed_ips (ip) VALUES ('213.176.74.187'), ('172.18.0.1')
+ON CONFLICT DO NOTHING;
+
 COMMIT;

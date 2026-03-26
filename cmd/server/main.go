@@ -38,6 +38,7 @@ func main() {
 	rkRepo := repo.NewRKRepo(database)
 	searchRepo := repo.NewSearchRepo(database)
 	userRepo := repo.NewUserRepo(database)
+	ipRepo := repo.NewIPRepo(database)
 
 	// --- services ---
 	importSvc := service.NewImportService(database, deviceRepo, parametrRepo, rkRepo)
@@ -51,6 +52,7 @@ func main() {
 	uploadH := handler.NewUploadHandler(importSvc, jobs)
 	internalUploadH := handler.NewInternalUploadHandler(importSvc, jobs)
 	userH := handler.NewUserHandler(userRepo)
+	ipH := handler.NewIPHandler(ipRepo)
 
 	// --- log store (last 500 entries) ---
 	logStore := middleware.NewLogStore(500)
@@ -63,7 +65,7 @@ func main() {
 	r.MaxMultipartMemory = 512 << 20 // 512 MB
 
 	// IP whitelist + request logger на весь сервер
-	r.Use(middleware.IPWhitelist())
+	r.Use(middleware.IPWhitelist(ipRepo))
 	r.Use(middleware.RequestLogger(logStore))
 
 	// статика
@@ -97,6 +99,10 @@ func main() {
 		internal.GET("/users", userH.List)
 		internal.POST("/users", userH.Create)
 		internal.DELETE("/users/:id", userH.Delete)
+
+		internal.GET("/ips", ipH.List)
+		internal.POST("/ips", ipH.Create)
+		internal.DELETE("/ips/:id", ipH.Delete)
 
 		internal.GET("/logs", logsH.All)
 		internal.GET("/logs/errors", logsH.Errors)

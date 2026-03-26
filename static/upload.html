@@ -465,6 +465,21 @@
   </div>
 </div>
 
+<!-- Allowed IPs -->
+<div class="users-panel">
+  <div class="users-title">Разрешённые IP-адреса</div>
+  <div class="users-form" style="grid-template-columns: 1fr auto;">
+    <div class="field">
+      <label>IP-адрес</label>
+      <input type="text" id="ipAddr" placeholder="192.168.1.1">
+    </div>
+    <button class="btn" style="height:36px;padding:0 16px" onclick="addIP()">Добавить</button>
+  </div>
+  <div class="users-list" id="ipsList">
+    <div class="users-empty">загрузка...</div>
+  </div>
+</div>
+
 <!-- Logs -->
 <div class="logs-panel">
   <div class="logs-header">
@@ -698,6 +713,7 @@ async function tryAuth() {
       document.getElementById('baseUrl').value = gateUrl;
       authGate.style.display = 'none';
       loadUsers();
+      loadIPs();
     } else {
       errEl.textContent = 'Неверный API ключ';
       errEl.style.display = 'block';
@@ -842,10 +858,74 @@ async function deleteUser(id) {
   } catch(e) { alert(e.message); }
 }
 
-// load users on page load and when API key changes
-document.getElementById('apiKey').addEventListener('change', () => loadUsers());
-document.getElementById('baseUrl').addEventListener('change', () => loadUsers());
+// --- Allowed IPs ---
+async function loadIPs() {
+  const list = document.getElementById('ipsList');
+  if (!key()) {
+    list.innerHTML = '<div class="users-empty">введите API Key</div>';
+    return;
+  }
+  try {
+    const r = await fetch(`${base()}/ips`, {
+      headers: { 'X-API-Key': key() }
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const ips = await r.json();
+    if (!ips || ips.length === 0) {
+      list.innerHTML = '<div class="users-empty">нет IP-адресов</div>';
+      return;
+    }
+    list.innerHTML = ips.map(ip => `
+      <div class="user-row">
+        <div class="user-info">
+          <span class="user-id">${ip.ip}</span>
+          <span class="user-date">${new Date(ip.created_at).toLocaleString()}</span>
+        </div>
+        <button class="btn-del" onclick="deleteIP(${ip.id})">удалить</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="users-error">${e.message}</div>`;
+  }
+}
+
+async function addIP() {
+  const el = document.getElementById('ipAddr');
+  const ip = el.value.trim();
+  if (!ip) { alert('Введите IP-адрес'); return; }
+  if (!key()) { alert('Введите API Key'); return; }
+
+  try {
+    const r = await fetch(`${base()}/ips`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key() },
+      body: JSON.stringify({ ip: ip })
+    });
+    const data = await r.json();
+    if (!r.ok) { alert(data.error || 'ошибка'); return; }
+    el.value = '';
+    loadIPs();
+  } catch(e) { alert(e.message); }
+}
+
+async function deleteIP(id) {
+  if (!confirm('Удалить этот IP-адрес?')) return;
+  try {
+    const r = await fetch(`${base()}/ips/${id}`, {
+      method: 'DELETE',
+      headers: { 'X-API-Key': key() }
+    });
+    const data = await r.json();
+    if (!r.ok) { alert(data.error || 'ошибка'); return; }
+    loadIPs();
+  } catch(e) { alert(e.message); }
+}
+
+// load users and IPs on page load and when API key changes
+document.getElementById('apiKey').addEventListener('change', () => { loadUsers(); loadIPs(); });
+document.getElementById('baseUrl').addEventListener('change', () => { loadUsers(); loadIPs(); });
 setTimeout(loadUsers, 500);
+setTimeout(loadIPs, 500);
 </script>
 </body>
 </html>
