@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"net"
 	"net/http"
-	"os"
-	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/whynot00/imsi-bot/internal/repo"
 )
 
 const accessDeniedHTML = `<!DOCTYPE html>
@@ -60,26 +62,13 @@ body::before{
 </body>
 </html>`
 
-// IPWhitelist allows requests only from IPs listed in the ALLOWED_IPS env variable.
-// Multiple IPs can be separated by commas: "1.2.3.4,5.6.7.8".
-// Also always allows localhost for local development.
-func IPWhitelist() gin.HandlerFunc {
-	raw := os.Getenv("ALLOWED_IPS")
-	if raw == "" {
-		panic("ALLOWED_IPS environment variable is not set")
-	}
-
-	allowed := make(map[string]struct{})
-	for _, ip := range strings.Split(raw, ",") {
-		ip = strings.TrimSpace(ip)
-		if ip != "" {
-			allowed[ip] = struct{}{}
-		}
-	}
-	// always allow localhost
-	for _, lo := range []string{"127.0.0.1", "::1"} {
-		allowed[lo] = struct{}{}
-	}
+// IPWhitelist allows requests only from IPs stored in the allowed_ips table.
+// The list is cached and refreshed every 5 seconds to avoid hitting DB on every request.
+// Localhost (127.0.0.1, ::1) is always allowed.
+func IPWhitelist(ipRepo *repo.IPRepo) gin.HandlerFunc {
+	cache := &ipCache{repo: ipRepo}
+	// initial load
+	cache.refresh()
 
 	return func(c *gin.Context) {
 		clientIP := c.ClientIP()
@@ -89,11 +78,55 @@ func IPWhitelist() gin.HandlerFunc {
 			clientIP = host
 		}
 
-		if _, ok := allowed[clientIP]; !ok {
+		if !cache.isAllowed(clientIP) {
 			c.Data(http.StatusForbidden, "text/html; charset=utf-8", []byte(accessDeniedHTML))
 			c.Abort()
 			return
 		}
 		c.Next()
 	}
+}
+
+// ipCache keeps a cached set of allowed IPs, refreshed periodically.
+type ipCache struct {
+	repo    *repo.IPRepo
+	mu      sync.RWMutex
+	allowed map[string]struct{}
+	updated time.Time
+}
+
+const cacheTTL = 5 * time.Second
+
+func (c *ipCache) refresh() {
+	ips, err := c.repo.AllIPs(context.Background())
+	if err != nil {
+		return // keep old cache on error
+	}
+	m := make(map[string]struct{}, len(ips)+2)
+	for _, ip := range ips {
+		m[ip] = struct{}{}
+	}
+	// always allow localhost
+	m["127.0.0.1"] = struct{}{}
+	m["::1"] = struct{}{}
+
+	c.mu.Lock()
+	c.allowed = m
+	c.updated = time.Now()
+	c.mu.Unlock()
+}
+
+func (c *ipCache) isAllowed(ip string) bool {
+	c.mu.RLock()
+	stale := time.Since(c.updated) > cacheTTL
+	_, ok := c.allowed[ip]
+	c.mu.RUnlock()
+
+	if stale {
+		c.refresh()
+		c.mu.RLock()
+		_, ok = c.allowed[ip]
+		c.mu.RUnlock()
+	}
+	return ok
 }

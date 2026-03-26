@@ -50,6 +50,13 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// AllowedIP is the DB representation of a whitelisted IP address.
+type AllowedIP struct {
+	ID        int64     `json:"id"`
+	IP        string    `json:"ip"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // DeviceResult is returned by IMSI/IMEI search queries and joins
 // all sightings for a device across both source types.
 type DeviceResult struct {
