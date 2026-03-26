@@ -43,6 +43,13 @@ type SightingRK struct {
 	Signal   int
 }
 
+// User is the DB representation of an authorised Telegram user.
+type User struct {
+	ID        int64     `json:"id"`
+	Username  string    `json:"username"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // DeviceResult is returned by IMSI/IMEI search queries and joins
 // all sightings for a device across both source types.
 type DeviceResult struct {

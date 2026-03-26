@@ -66,7 +66,10 @@ func (h *InternalUploadHandler) processParametr(jobID string, data []byte) {
 	}()
 
 	h.jobs.SetProcessing(jobID)
-	result, err := h.svc.ImportParametrFromCSV(context.Background(), data)
+	onProgress := func(p service.Progress) {
+		h.jobs.UpdateProgress(jobID, p)
+	}
+	result, err := h.svc.ImportParametrFromCSV(context.Background(), data, onProgress)
 	if err != nil {
 		log.Printf("[internal] job %s failed: %v", jobID, err)
 		h.jobs.SetFailed(jobID, err.Error())
@@ -85,7 +88,10 @@ func (h *InternalUploadHandler) processRK(jobID string, data []byte) {
 	}()
 
 	h.jobs.SetProcessing(jobID)
-	result, err := h.svc.ImportRKFromCSV(context.Background(), data)
+	onProgress := func(p service.Progress) {
+		h.jobs.UpdateProgress(jobID, p)
+	}
+	result, err := h.svc.ImportRKFromCSV(context.Background(), data, onProgress)
 	if err != nil {
 		log.Printf("[internal] job %s failed: %v", jobID, err)
 		h.jobs.SetFailed(jobID, err.Error())

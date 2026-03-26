@@ -22,6 +22,18 @@ const (
 	txChunkSize       = 10000 // rows per transaction commit
 )
 
+// Progress reports live import state to the caller.
+type Progress struct {
+	Phase     string `json:"phase"`     // "locations", "devices", "done"
+	Devices   int    `json:"devices"`
+	Locations int    `json:"locations"`
+	Sightings int    `json:"sightings"`
+	Skipped   int    `json:"skipped"`
+}
+
+// ProgressFunc is called periodically during import with current progress.
+type ProgressFunc func(Progress)
+
 // ImportResult summarises what was written to the database.
 type ImportResult struct {
 	Devices   int `json:"devices"`
@@ -51,8 +63,20 @@ func NewImportService(
 // Parametr import — 2-pass streaming
 // ---------------------------------------------------------------------------
 
-func (s *ImportService) ImportParametrFromCSV(ctx context.Context, data []byte) (*ImportResult, error) {
+func (s *ImportService) ImportParametrFromCSV(ctx context.Context, data []byte, onProgress ProgressFunc) (*ImportResult, error) {
 	out := &ImportResult{}
+
+	report := func(phase string) {
+		if onProgress != nil {
+			onProgress(Progress{
+				Phase:     phase,
+				Devices:   out.Devices,
+				Locations: out.Locations,
+				Sightings: out.Sightings,
+				Skipped:   out.Skipped,
+			})
+		}
+	}
 
 	// --- Pass 1: collect unique locations ---
 	type locKey struct {
@@ -99,6 +123,8 @@ func (s *ImportService) ImportParametrFromCSV(ctx context.Context, data []byte) 
 		return nil, fmt.Errorf("pass 1: %w", err)
 	}
 	locSeen = nil // free memory
+	out.Locations = len(locRows)
+	report("locations")
 	log.Printf("[parametr] pass 1 done: %d unique locations collected", len(locRows))
 
 	// --- Insert locations in a separate transaction ---
@@ -184,6 +210,7 @@ func (s *ImportService) ImportParametrFromCSV(ctx context.Context, data []byte) 
 			return fmt.Errorf("commit: %w", err)
 		}
 		log.Printf("[parametr] pass 2 progress: %d devices, %d sightings committed", out.Devices, out.Sightings)
+		report("devices")
 		return beginTx()
 	}
 
@@ -213,9 +240,9 @@ func (s *ImportService) ImportParametrFromCSV(ctx context.Context, data []byte) 
 			if _, pending := pendingDeviceKeys[deviceKey]; !pending {
 				pendingDevices = append(pendingDevices, [2]string{d.IMSI, d.IMEI})
 				pendingDeviceKeys[deviceKey] = struct{}{}
+				out.Devices++
 			}
 		}
-		out.Devices++
 
 		locID := nearestLocation(insertedLocs, seenAt, locationTolerance)
 
@@ -236,6 +263,7 @@ func (s *ImportService) ImportParametrFromCSV(ctx context.Context, data []byte) 
 			if err := flushBatch(); err != nil {
 				return err
 			}
+			report("devices")
 		}
 		if rowsInTx >= txChunkSize {
 			return commitAndReopen()
@@ -265,8 +293,20 @@ func (s *ImportService) ImportParametrFromCSV(ctx context.Context, data []byte) 
 // RK import — single-pass streaming with chunked transactions
 // ---------------------------------------------------------------------------
 
-func (s *ImportService) ImportRKFromCSV(ctx context.Context, data []byte) (*ImportResult, error) {
+func (s *ImportService) ImportRKFromCSV(ctx context.Context, data []byte, onProgress ProgressFunc) (*ImportResult, error) {
 	out := &ImportResult{}
+
+	report := func(phase string) {
+		if onProgress != nil {
+			onProgress(Progress{
+				Phase:     phase,
+				Devices:   out.Devices,
+				Locations: out.Locations,
+				Sightings: out.Sightings,
+				Skipped:   out.Skipped,
+			})
+		}
+	}
 
 	deviceCache := make(map[string]int64)
 
@@ -329,6 +369,7 @@ func (s *ImportService) ImportRKFromCSV(ctx context.Context, data []byte) (*Impo
 			return fmt.Errorf("commit: %w", err)
 		}
 		log.Printf("[rk] progress: %d devices, %d sightings committed", out.Devices, out.Sightings)
+		report("devices")
 		return beginTx()
 	}
 
@@ -366,9 +407,9 @@ func (s *ImportService) ImportRKFromCSV(ctx context.Context, data []byte) (*Impo
 			if _, pending := pendingDeviceKeys[deviceKey]; !pending {
 				pendingDevices = append(pendingDevices, [2]string{d.IMSI, d.IMEI})
 				pendingDeviceKeys[deviceKey] = struct{}{}
+				out.Devices++
 			}
 		}
-		out.Devices++
 
 		pendingSightings = append(pendingSightings, sightingWithKey{
 			SightingRKRow: repo.SightingRKRow{
@@ -387,6 +428,7 @@ func (s *ImportService) ImportRKFromCSV(ctx context.Context, data []byte) (*Impo
 			if err := flushBatch(); err != nil {
 				return err
 			}
+			report("devices")
 		}
 		if rowsInTx >= txChunkSize {
 			return commitAndReopen()

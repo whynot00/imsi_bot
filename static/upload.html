@@ -222,6 +222,61 @@
     grid-template-columns: 1fr 1fr;
     gap: 12px;
   }
+
+  /* users panel */
+  .users-panel {
+    width: 100%; max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .users-title {
+    font-size: 10px; letter-spacing: .12em;
+    color: var(--text-dim); text-transform: uppercase;
+  }
+  .users-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 12px;
+    align-items: end;
+  }
+  .users-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 12px;
+  }
+  .user-info { display: flex; gap: 16px; }
+  .user-id { color: var(--accent); }
+  .user-name { color: var(--text-dim); }
+  .user-date { color: var(--text-dim); font-size: 10px; }
+  .btn-del {
+    padding: 4px 10px;
+    border: 1px solid var(--accent2);
+    background: rgba(255,62,108,.08);
+    color: var(--accent2);
+    font-family: var(--mono);
+    font-size: 11px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-del:hover { background: rgba(255,62,108,.2); }
+  .users-empty { color: var(--text-dim); font-size: 12px; }
+  .users-error { color: var(--accent2); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -295,6 +350,25 @@
     <div class="result" id="resR"></div>
   </div>
 
+</div>
+
+<!-- Users -->
+<div class="users-panel">
+  <div class="users-title">Пользователи</div>
+  <div class="users-form">
+    <div class="field">
+      <label>Telegram ID</label>
+      <input type="text" id="userId" placeholder="123456789">
+    </div>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="userUsername" placeholder="@username">
+    </div>
+    <button class="btn" style="height:36px;padding:0 16px" onclick="addUser()">Добавить</button>
+  </div>
+  <div class="users-list" id="usersList">
+    <div class="users-empty">загрузка...</div>
+  </div>
 </div>
 
 <script>
@@ -428,6 +502,11 @@ function showResult(el, ok, data) {
 }
 
 function pollJobStatus(baseUrl, jobId, btn, prog, res) {
+  const phaseNames = {
+    locations: 'Сбор локаций...',
+    devices: 'Запись устройств...',
+  };
+
   const interval = setInterval(async () => {
     try {
       const r = await fetch(`${baseUrl}/upload/status/${jobId}`, {
@@ -445,15 +524,40 @@ function pollJobStatus(baseUrl, jobId, btn, prog, res) {
         btn.disabled = false;
         prog.className = 'progress';
         showResult(res, false, { error: data.error || 'неизвестная ошибка' });
+      } else if (data.progress) {
+        // Show live progress
+        const p = data.progress;
+        const phase = phaseNames[p.phase] || p.phase;
+        res.className = 'result show';
+        res.innerHTML = `
+          <div class="result-row">
+            <span class="result-key">стадия</span>
+            <span class="result-val" style="color:var(--accent3)">${phase}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">devices</span>
+            <span class="result-val green">${p.devices.toLocaleString()}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">locations</span>
+            <span class="result-val green">${p.locations.toLocaleString()}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">sightings</span>
+            <span class="result-val green">${p.sightings.toLocaleString()}</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">skipped</span>
+            <span class="result-val ${p.skipped > 0 ? 'red' : 'green'}">${p.skipped.toLocaleString()}</span>
+          </div>`;
       }
-      // pending/processing — keep polling
     } catch(e) {
       clearInterval(interval);
       btn.disabled = false;
       prog.className = 'progress';
       showResult(res, false, { error: 'ошибка при проверке статуса: ' + e.message });
     }
-  }, 2000);
+  }, 1000);
 }
 
 // restore saved values
@@ -464,6 +568,77 @@ if (savedUrl) document.getElementById('baseUrl').value = savedUrl;
 
 document.getElementById('apiKey').addEventListener('change', e => localStorage.setItem('apiKey', e.target.value));
 document.getElementById('baseUrl').addEventListener('change', e => localStorage.setItem('internalUrl', e.target.value));
+
+// --- Users ---
+async function loadUsers() {
+  const list = document.getElementById('usersList');
+  if (!key()) {
+    list.innerHTML = '<div class="users-empty">введите API Key</div>';
+    return;
+  }
+  try {
+    const r = await fetch(`${base()}/users`, {
+      headers: { 'X-API-Key': key() }
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const users = await r.json();
+    if (!users || users.length === 0) {
+      list.innerHTML = '<div class="users-empty">нет пользователей</div>';
+      return;
+    }
+    list.innerHTML = users.map(u => `
+      <div class="user-row">
+        <div class="user-info">
+          <span class="user-id">${u.id}</span>
+          <span class="user-name">${u.username || '—'}</span>
+          <span class="user-date">${new Date(u.created_at).toLocaleString()}</span>
+        </div>
+        <button class="btn-del" onclick="deleteUser(${u.id})">удалить</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="users-error">${e.message}</div>`;
+  }
+}
+
+async function addUser() {
+  const idEl = document.getElementById('userId');
+  const nameEl = document.getElementById('userUsername');
+  const id = parseInt(idEl.value.trim(), 10);
+  if (!id) { alert('Введите Telegram ID'); return; }
+  if (!key()) { alert('Введите API Key'); return; }
+
+  try {
+    const r = await fetch(`${base()}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key() },
+      body: JSON.stringify({ id: id, username: nameEl.value.trim() })
+    });
+    const data = await r.json();
+    if (!r.ok) { alert(data.error || 'ошибка'); return; }
+    idEl.value = '';
+    nameEl.value = '';
+    loadUsers();
+  } catch(e) { alert(e.message); }
+}
+
+async function deleteUser(id) {
+  if (!confirm(`Удалить пользователя ${id}?`)) return;
+  try {
+    const r = await fetch(`${base()}/users/${id}`, {
+      method: 'DELETE',
+      headers: { 'X-API-Key': key() }
+    });
+    const data = await r.json();
+    if (!r.ok) { alert(data.error || 'ошибка'); return; }
+    loadUsers();
+  } catch(e) { alert(e.message); }
+}
+
+// load users on page load and when API key changes
+document.getElementById('apiKey').addEventListener('change', () => loadUsers());
+document.getElementById('baseUrl').addEventListener('change', () => loadUsers());
+setTimeout(loadUsers, 500);
 </script>
 </body>
 </html>

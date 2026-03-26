@@ -81,12 +81,13 @@ func BatchUpsertDevices(ctx context.Context, tx *sql.Tx, pairs [][2]string) (map
 
 // BatchInsertLocations inserts locations in batches and returns the inserted rows.
 // Duplicates within the input must be removed by the caller.
+// SeenAt in the result comes from the original input (not from DB) to preserve timezone.
 func BatchInsertLocations(ctx context.Context, tx *sql.Tx, locs []struct {
 	SeenAt time.Time
 	Lat    float64
 	Lon    float64
 }) ([]LocationInserted, error) {
-	var result []LocationInserted
+	result := make([]LocationInserted, 0, len(locs))
 
 	for i := 0; i < len(locs); i += batchSize {
 		end := i + batchSize
@@ -106,19 +107,24 @@ func BatchInsertLocations(ctx context.Context, tx *sql.Tx, locs []struct {
 			fmt.Fprintf(&sb, "($%d,$%d,$%d)", n+1, n+2, n+3)
 			args = append(args, l.SeenAt, l.Lat, l.Lon)
 		}
-		sb.WriteString(` ON CONFLICT ON CONSTRAINT uq_locations_parametr DO UPDATE SET seen_at = EXCLUDED.seen_at RETURNING id, seen_at`)
+		sb.WriteString(` ON CONFLICT ON CONSTRAINT uq_locations_parametr DO UPDATE SET seen_at = EXCLUDED.seen_at RETURNING id`)
 
 		rows, err := tx.QueryContext(ctx, sb.String(), args...)
 		if err != nil {
 			return nil, fmt.Errorf("batch insert locations: %w", err)
 		}
+		j := 0
 		for rows.Next() {
-			var li LocationInserted
-			if err := rows.Scan(&li.ID, &li.SeenAt); err != nil {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
 				rows.Close()
 				return nil, err
 			}
-			result = append(result, li)
+			result = append(result, LocationInserted{
+				ID:     id,
+				SeenAt: batch[j].SeenAt, // original time, not from DB
+			})
+			j++
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {

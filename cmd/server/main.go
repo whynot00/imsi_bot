@@ -50,6 +50,7 @@ func main() {
 	searchH := handler.NewSearchHandler(searchSvc)
 	uploadH := handler.NewUploadHandler(importSvc, jobs)
 	internalUploadH := handler.NewInternalUploadHandler(importSvc, jobs)
+	userH := handler.NewUserHandler(userRepo)
 
 	// --- router ---
 	r := gin.Default()
@@ -76,12 +77,16 @@ func main() {
 		api.GET("/upload/status/:id", uploadH.JobStatus)
 	}
 
-	// Internal API — api key auth, для загрузки больших файлов
-	internal := r.Group("/internal", middleware.ApiKeyAuth())
+	// Internal API — IP whitelist + api key auth
+	internal := r.Group("/internal", middleware.IPWhitelist(), middleware.ApiKeyAuth())
 	{
 		internal.POST("/upload/parametr", internalUploadH.UploadParametr)
 		internal.POST("/upload/rk", internalUploadH.UploadRK)
 		internal.GET("/upload/status/:id", internalUploadH.JobStatus)
+
+		internal.GET("/users", userH.List)
+		internal.POST("/users", userH.Create)
+		internal.DELETE("/users/:id", userH.Delete)
 	}
 
 	addr := ":" + cfg.Port
