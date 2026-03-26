@@ -286,6 +286,21 @@
   <div class="subtitle">Загрузка данных / Internal API</div>
 </header>
 
+<!-- Auth gate -->
+<div id="authGate" style="position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:24px;display:none">
+  <div style="font-size:64px;font-weight:700;color:rgba(255,62,108,.15);letter-spacing:.2em">403</div>
+  <div style="font-family:var(--head);font-size:14px;letter-spacing:.15em;color:var(--accent2)">ACCESS DENIED</div>
+  <div style="font-size:12px;color:var(--text-dim);text-align:center;line-height:1.8">Введите данные для доступа</div>
+  <div style="display:flex;flex-direction:column;gap:10px;width:320px">
+    <input type="text" id="gateUrl" placeholder="http://localhost:8080/internal" style="background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:10px 12px;border-radius:var(--radius);outline:none">
+    <div style="display:flex;gap:12px">
+      <input type="password" id="gateKey" placeholder="API Key" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:10px 12px;border-radius:var(--radius);outline:none">
+      <button class="btn" style="width:auto;padding:10px 20px" onclick="tryAuth()">Войти</button>
+    </div>
+  </div>
+  <div id="gateError" style="font-size:11px;color:var(--accent2);display:none"></div>
+</div>
+
 <!-- Config -->
 <div class="config-panel">
   <div class="config-title">Конфигурация</div>
@@ -565,6 +580,57 @@ const savedKey = localStorage.getItem('apiKey');
 const savedUrl = localStorage.getItem('internalUrl');
 if (savedKey) document.getElementById('apiKey').value = savedKey;
 if (savedUrl) document.getElementById('baseUrl').value = savedUrl;
+
+// Auth gate
+const mainContent = document.getElementById('mainContent');
+const authGate = document.getElementById('authGate');
+
+// fill gate fields from saved values
+document.getElementById('gateUrl').value = savedUrl || document.getElementById('baseUrl').value;
+if (savedKey) document.getElementById('gateKey').value = savedKey;
+
+async function tryAuth() {
+  const gateUrl = document.getElementById('gateUrl').value.trim().replace(/\/$/, '');
+  const k = document.getElementById('gateKey').value.trim();
+  if (!k || !gateUrl) return;
+  const errEl = document.getElementById('gateError');
+  errEl.style.display = 'none';
+  try {
+    const r = await fetch(`${gateUrl}/users`, { headers: { 'X-API-Key': k } });
+    if (r.ok) {
+      localStorage.setItem('apiKey', k);
+      localStorage.setItem('internalUrl', gateUrl);
+      document.getElementById('apiKey').value = k;
+      document.getElementById('baseUrl').value = gateUrl;
+      authGate.style.display = 'none';
+      loadUsers();
+    } else {
+      errEl.textContent = 'Неверный API ключ';
+      errEl.style.display = 'block';
+    }
+  } catch(e) {
+    errEl.textContent = 'Ошибка соединения: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function checkAuth() {
+  const k = key();
+  if (!k) { authGate.style.display = 'flex'; return; }
+  try {
+    const r = await fetch(`${base()}/users`, { headers: { 'X-API-Key': k } });
+    if (!r.ok) { authGate.style.display = 'flex'; return; }
+    authGate.style.display = 'none';
+  } catch {
+    authGate.style.display = 'flex';
+  }
+}
+
+document.getElementById('gateKey').addEventListener('keydown', e => {
+  if (e.key === 'Enter') tryAuth();
+});
+
+checkAuth();
 
 document.getElementById('apiKey').addEventListener('change', e => localStorage.setItem('apiKey', e.target.value));
 document.getElementById('baseUrl').addEventListener('change', e => localStorage.setItem('internalUrl', e.target.value));

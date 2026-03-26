@@ -56,6 +56,9 @@ func main() {
 	r := gin.Default()
 	r.MaxMultipartMemory = 512 << 20 // 512 MB
 
+	// IP whitelist на весь сервер
+	r.Use(middleware.IPWhitelist())
+
 	// статика
 	r.StaticFile("/", "./static/index.html")
 	r.StaticFile("/upload", "./static/upload.html")
@@ -77,8 +80,8 @@ func main() {
 		api.GET("/upload/status/:id", uploadH.JobStatus)
 	}
 
-	// Internal API — IP whitelist + api key auth
-	internal := r.Group("/internal", middleware.IPWhitelist(), middleware.ApiKeyAuth())
+	// Internal API — api key auth (IP whitelist already global)
+	internal := r.Group("/internal", middleware.ApiKeyAuth())
 	{
 		internal.POST("/upload/parametr", internalUploadH.UploadParametr)
 		internal.POST("/upload/rk", internalUploadH.UploadRK)

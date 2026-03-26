@@ -241,9 +241,21 @@ const tg = window.Telegram?.WebApp;
 if (tg) {
   tg.ready();
   tg.expand();
-  tg.disableVerticalSwipes(); // Важно для кастомной шторки
+  tg.disableVerticalSwipes();
   tg.setHeaderColor('#080b10');
   tg.setBackgroundColor('#080b10');
+}
+
+if (!tg?.initData) {
+  document.body.innerHTML = `
+    <div style="position:fixed;inset:0;background:#080b10;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px;font-family:'Azeret Mono',monospace;z-index:9999">
+      <div style="font-size:64px;font-weight:700;color:rgba(255,62,108,.15);letter-spacing:.2em">403</div>
+      <div style="font-size:14px;letter-spacing:.15em;color:#ff3e6c;font-family:'Tektur',sans-serif">ACCESS DENIED</div>
+      <div style="font-size:12px;color:#4a5a6a;text-align:center;line-height:1.8">
+        Доступ только через<br>Telegram Mini App
+      </div>
+    </div>`;
+  throw new Error('no initData');
 }
 
 function authHeaders() { return { 'X-Telegram-Init-Data': tg?.initData || '' }; }
