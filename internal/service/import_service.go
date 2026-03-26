@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	locationTolerance = 30 * time.Second
+	locationTolerance = 5 * time.Minute
 	flushSize         = 1000  // rows per batch INSERT
 	txChunkSize       = 10000 // rows per transaction commit
 )
