@@ -40,13 +40,16 @@ func main() {
 	userRepo := repo.NewUserRepo(database)
 
 	// --- services ---
-	importSvc := service.NewImportService(deviceRepo, parametrRepo, rkRepo)
+	importSvc := service.NewImportService(database, deviceRepo, parametrRepo, rkRepo)
 	searchSvc := service.NewSearchService(searchRepo, deviceRepo)
+
+	// --- job store (shared between upload handlers) ---
+	jobs := handler.NewJobStore()
 
 	// --- handlers ---
 	searchH := handler.NewSearchHandler(searchSvc)
-	uploadH := handler.NewUploadHandler(importSvc)
-	internalUploadH := handler.NewInternalUploadHandler(importSvc)
+	uploadH := handler.NewUploadHandler(importSvc, jobs)
+	internalUploadH := handler.NewInternalUploadHandler(importSvc, jobs)
 
 	// --- router ---
 	r := gin.Default()
@@ -70,6 +73,7 @@ func main() {
 		api.GET("/search/suggest", searchH.Suggest)
 		api.POST("/upload/parametr", uploadH.UploadParametr)
 		api.POST("/upload/rk", uploadH.UploadRK)
+		api.GET("/upload/status/:id", uploadH.JobStatus)
 	}
 
 	// Internal API — api key auth, для загрузки больших файлов
@@ -77,6 +81,7 @@ func main() {
 	{
 		internal.POST("/upload/parametr", internalUploadH.UploadParametr)
 		internal.POST("/upload/rk", internalUploadH.UploadRK)
+		internal.GET("/upload/status/:id", internalUploadH.JobStatus)
 	}
 
 	addr := ":" + cfg.Port
