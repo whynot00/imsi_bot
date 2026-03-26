@@ -277,6 +277,85 @@
   .btn-del:hover { background: rgba(255,62,108,.2); }
   .users-empty { color: var(--text-dim); font-size: 12px; }
   .users-error { color: var(--accent2); font-size: 12px; }
+
+  /* logs panel */
+  .logs-panel {
+    width: 100%; max-width: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .logs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logs-title {
+    font-size: 10px; letter-spacing: .12em;
+    color: var(--text-dim); text-transform: uppercase;
+  }
+  .logs-tabs {
+    display: flex; gap: 8px;
+  }
+  .logs-tab {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .logs-tab.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,255,157,.08);
+  }
+  .logs-tab.error-tab.active {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(255,62,108,.08);
+  }
+  .logs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .log-row {
+    display: grid;
+    grid-template-columns: 70px 36px 50px 1fr 60px;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 11px;
+    align-items: center;
+  }
+  .log-row.err { border-color: rgba(255,62,108,.2); }
+  .log-time { color: var(--text-dim); }
+  .log-status { font-weight: 600; }
+  .log-status.ok { color: var(--accent); }
+  .log-status.err { color: var(--accent2); }
+  .log-method { color: var(--accent3); }
+  .log-path { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-latency { color: var(--text-dim); text-align: right; }
+  .log-error-detail {
+    grid-column: 1 / -1;
+    color: var(--accent2);
+    font-size: 10px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255,62,108,.1);
+  }
+  .logs-empty { color: var(--text-dim); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -383,6 +462,21 @@
   </div>
   <div class="users-list" id="usersList">
     <div class="users-empty">загрузка...</div>
+  </div>
+</div>
+
+<!-- Logs -->
+<div class="logs-panel">
+  <div class="logs-header">
+    <div class="logs-title">Логи</div>
+    <div class="logs-tabs">
+      <button class="logs-tab active" id="tabAll" onclick="switchLogTab('all')">Все</button>
+      <button class="logs-tab error-tab" id="tabErrors" onclick="switchLogTab('errors')">Ошибки</button>
+      <button class="logs-tab" onclick="loadLogs()" style="border-color:var(--accent3);color:var(--accent3)">Обновить</button>
+    </div>
+  </div>
+  <div class="logs-list" id="logsList">
+    <div class="logs-empty">загрузка...</div>
   </div>
 </div>
 
@@ -631,6 +725,53 @@ document.getElementById('gateKey').addEventListener('keydown', e => {
 });
 
 checkAuth();
+
+// --- Logs ---
+let currentLogTab = 'all';
+
+function switchLogTab(tab) {
+  currentLogTab = tab;
+  document.getElementById('tabAll').classList.toggle('active', tab === 'all');
+  document.getElementById('tabErrors').classList.toggle('active', tab === 'errors');
+  loadLogs();
+}
+
+async function loadLogs() {
+  const list = document.getElementById('logsList');
+  if (!key()) { list.innerHTML = '<div class="logs-empty">введите API Key</div>'; return; }
+  const endpoint = currentLogTab === 'errors' ? '/logs/errors' : '/logs';
+  try {
+    const r = await fetch(`${base()}${endpoint}`, { headers: { 'X-API-Key': key() } });
+    if (!r.ok) throw new Error(await r.text());
+    const logs = await r.json();
+    if (!logs || logs.length === 0) {
+      list.innerHTML = `<div class="logs-empty">${currentLogTab === 'errors' ? 'нет ошибок' : 'нет записей'}</div>`;
+      return;
+    }
+    // newest first
+    list.innerHTML = logs.slice().reverse().map(l => {
+      const t = new Date(l.time);
+      const time = t.toLocaleTimeString('ru', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const isErr = l.is_error;
+      return `<div class="log-row${isErr ? ' err' : ''}">
+        <span class="log-time">${time}</span>
+        <span class="log-status ${isErr ? 'err' : 'ok'}">${l.status}</span>
+        <span class="log-method">${l.method}</span>
+        <span class="log-path" title="${l.path}">${l.path}</span>
+        <span class="log-latency">${l.latency}</span>
+        ${l.error ? `<div class="log-error-detail">${l.error}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="logs-empty" style="color:var(--accent2)">${e.message}</div>`;
+  }
+}
+
+// auto-refresh logs every 5s
+setInterval(() => {
+  if (authGate.style.display === 'none') loadLogs();
+}, 5000);
+setTimeout(loadLogs, 600);
 
 document.getElementById('apiKey').addEventListener('change', e => localStorage.setItem('apiKey', e.target.value));
 document.getElementById('baseUrl').addEventListener('change', e => localStorage.setItem('internalUrl', e.target.value));

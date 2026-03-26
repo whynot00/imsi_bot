@@ -52,12 +52,19 @@ func main() {
 	internalUploadH := handler.NewInternalUploadHandler(importSvc, jobs)
 	userH := handler.NewUserHandler(userRepo)
 
+	// --- log store (last 500 entries) ---
+	logStore := middleware.NewLogStore(500)
+
+	// --- handlers ---
+	logsH := handler.NewLogsHandler(logStore)
+
 	// --- router ---
 	r := gin.Default()
 	r.MaxMultipartMemory = 512 << 20 // 512 MB
 
-	// IP whitelist на весь сервер
+	// IP whitelist + request logger на весь сервер
 	r.Use(middleware.IPWhitelist())
+	r.Use(middleware.RequestLogger(logStore))
 
 	// статика
 	r.StaticFile("/", "./static/index.html")
@@ -90,6 +97,9 @@ func main() {
 		internal.GET("/users", userH.List)
 		internal.POST("/users", userH.Create)
 		internal.DELETE("/users/:id", userH.Delete)
+
+		internal.GET("/logs", logsH.All)
+		internal.GET("/logs/errors", logsH.Errors)
 	}
 
 	addr := ":" + cfg.Port
