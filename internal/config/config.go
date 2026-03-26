@@ -1,17 +1,17 @@
 package config
 
 import (
+	"fmt"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Postgers Postgres
-	Telegram Telegram
+	Postgres PostgresConfig
+	Port     string
+	LogLevel string
 }
 
-type Postgres struct {
+type PostgresConfig struct {
 	Host     string
 	Port     string
 	User     string
@@ -20,27 +20,39 @@ type Postgres struct {
 	SSLMode  string
 }
 
-type Telegram struct {
-	Token string
+func (c PostgresConfig) DSN() string {
+	return fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		c.Host, c.Port, c.User, c.Password, c.DB, c.SSLMode,
+	)
 }
 
-func Load() *Config {
-
-	godotenv.Load()
-
-	config := Config{
-		Postgers: Postgres{
-			Host:     "localhost",
-			Port:     "5436",
-			User:     os.Getenv("POSTGRES_USER"),
-			Password: os.Getenv("POSTGRES_PASSWORD"),
-			DB:       "datapump_db",
-			SSLMode:  "disable",
+func Load() (*Config, error) {
+	return &Config{
+		Postgres: PostgresConfig{
+			Host:     env("POSTGRES_HOST", "localhost"),
+			Port:     env("POSTGRES_PORT", "5432"),
+			User:     required("POSTGRES_USER"),
+			Password: required("POSTGRES_PASSWORD"),
+			DB:       required("POSTGRES_DB"),
+			SSLMode:  env("POSTGRES_SSLMODE", "disable"),
 		},
-		Telegram: Telegram{
-			Token: os.Getenv("TELEGRAM_TOKEN"),
-		},
+		Port:     env("PORT", "8080"),
+		LogLevel: env("LOG_LEVEL", "info"),
+	}, nil
+}
+
+func env(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
+	return defaultVal
+}
 
-	return &config
+func required(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		panic(fmt.Sprintf("required environment variable %q is not set", key))
+	}
+	return v
 }

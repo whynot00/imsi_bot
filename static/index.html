@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>IMSI Bot</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@300;400;600;700&family=Tektur:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080b10;
+  --surface: rgba(12,17,26,0.95);
+  --border: rgba(0,200,255,0.12);
+  --accent: #00c8ff;
+  --accent-dim: rgba(0,200,255,0.15);
+  --text: #d0dde8;
+  --text-dim: #4a5a6a;
+  --mono: 'Azeret Mono', monospace;
+  --head: 'Tektur', sans-serif;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: var(--mono); color: var(--text); }
+
+#map { position: fixed; inset: 0; z-index: 0; filter: brightness(0.35) saturate(0.6); transition: filter .6s ease; }
+#map.active { filter: brightness(0.7) saturate(0.8); }
+.leaflet-tile-pane { filter: hue-rotate(195deg) invert(1) brightness(0.9); }
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  pointer-events: none;
+}
+#overlay.top {
+  justify-content: flex-start;
+  padding-top: 120px;
+}
+
+#searchBox {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: all;
+}
+
+.search-wrap { position: relative; }
+
+.search-type-tag {
+  position: absolute;
+  left: 12px; top: 50%;
+  transform: translateY(-50%);
+  background: var(--accent-dim);
+  border: 1px solid rgba(0,200,255,0.25);
+  border-radius: 5px;
+  color: var(--accent);
+  font-family: var(--head);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  padding: 3px 7px;
+  cursor: pointer;
+  user-select: none;
+  z-index: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.search-type-tag.hidden {
+  opacity: 0;
+  transform: translateY(-50%) scale(0.8);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  background: rgba(8,11,16,0.88);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 16px;
+  padding: 16px 48px 16px 62px;
+  outline: none;
+  backdrop-filter: blur(16px);
+  transition: border-color .2s, box-shadow .2s, padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-appearance: none;
+}
+.search-input.no-tag { padding-left: 16px; }
+.search-input::placeholder { color: var(--text-dim); }
+.search-input:focus {
+  border-color: rgba(0,200,255,0.4);
+  box-shadow: 0 0 0 3px rgba(0,200,255,0.07), 0 8px 32px rgba(0,0,0,0.4);
+}
+.search-input:disabled {
+  color: var(--accent);
+  opacity: 1;
+  border-color: rgba(0,200,255,0.3);
+  -webkit-text-fill-color: var(--accent);
+}
+
+.search-icon {
+  position: absolute; right: 16px; top: 50%;
+  transform: translateY(-50%);
+  width: 20px; height: 20px; opacity: .4; pointer-events: none;
+}
+.search-clear {
+  position: absolute; right: 14px; top: 50%;
+  transform: translateY(-50%);
+  width: 24px; height: 24px;
+  border: none; background: rgba(0,200,255,0.1);
+  border-radius: 50%; cursor: pointer;
+  color: var(--accent); font-size: 14px;
+  display: none; align-items: center; justify-content: center;
+}
+.search-clear.show { display: flex; }
+
+.suggest-list {
+  background: rgba(8,11,16,0.95);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+  display: none; flex-direction: column;
+  max-height: 220px; overflow-y: auto;
+}
+.suggest-list.open { display: flex; }
+.suggest-item {
+  padding: 13px 20px; cursor: pointer; font-size: 14px;
+  letter-spacing: .04em; border-bottom: 1px solid rgba(0,200,255,0.06);
+  transition: background .1s; display: flex; align-items: center; gap: 10px;
+}
+.suggest-item:hover { background: var(--accent-dim); color: var(--accent); }
+.suggest-icon { font-size: 10px; opacity: .4; }
+.search-loading { padding: 14px 20px; color: var(--text-dim); font-size: 12px; display: none; }
+.search-loading.show { display: block; }
+
+/* ОБНОВЛЕННАЯ ШТОРКА */
+#sheet {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+  background: var(--surface); border-top: 1px solid var(--border);
+  border-radius: 20px 20px 0 0;
+  height: 85vh;
+  display: flex; flex-direction: column;
+  backdrop-filter: blur(20px); padding-bottom: var(--safe-bottom);
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+  will-change: transform;
+}
+/* Классы состояний теперь только для JS-переключения */
+#sheet.peek   { transform: translateY(calc(85vh - 72px)); }
+#sheet.half   { transform: translateY(45vh); }
+#sheet.full   { transform: translateY(0); }
+#sheet.hidden { transform: translateY(100%); }
+#sheet.dragging { transition: none; }
+
+.sheet-header-area {
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none; /* Важно: отключаем стандартный скролл для заголовка */
+}
+.sheet-handle { width: 36px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; margin: 12px auto 0; }
+.sheet-header { padding: 12px 20px 10px; display: flex; align-items: center; gap: 12px; }
+.sheet-title { font-family: var(--head); font-size: 13px; letter-spacing: .08em; color: var(--text); flex: 1; }
+.sheet-meta { font-size: 11px; color: var(--text-dim); }
+.sheet-body { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+
+.sighting {
+  padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer; transition: background .15s;
+  display: grid; grid-template-columns: 32px 1fr auto; gap: 0 12px; align-items: start;
+}
+.sighting.active { background: rgba(0,200,255,0.05); }
+.sighting-num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-dim); border: 1px solid rgba(0,200,255,0.25); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+.sighting-main { display: flex; flex-direction: column; gap: 3px; }
+.sighting-time { font-size: 13px; font-weight: 600; color: var(--text); }
+.sighting-detail { font-size: 11px; color: var(--text-dim); }
+.sighting-coords { font-size: 10px; color: var(--accent); opacity: .7; text-align: right; line-height: 1.6; }
+.sighting-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-top: 3px; font-weight: 600; }
+.badge-gsm  { background: rgba(255,150,50,.12);  color: #ff9632; }
+.badge-umts { background: rgba(100,180,255,.12); color: #64b4ff; }
+.badge-lte  { background: rgba(0,200,255,.12);   color: var(--accent); }
+
+.custom-marker { width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid rgba(0,200,255,0.8); background: rgba(0,200,255,0.25); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(0,200,255,0.4); }
+.custom-marker.active { background: rgba(0,200,255,0.5); box-shadow: 0 0 20px rgba(0,200,255,0.7); }
+.custom-marker span { transform: rotate(45deg); font-size: 10px; font-weight: 700; color: var(--accent); }
+
+#toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(8,11,16,0.95); border: 1px solid var(--border); border-radius: 10px; padding: 10px 20px; font-size: 12px; color: var(--text-dim); z-index: 30; opacity: 0; transition: all .3s ease; pointer-events: none; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="overlay">
+  <div id="searchBox">
+    <div class="search-wrap">
+      <span class="search-type-tag" id="typeTag" onclick="toggleType()">IMSI</span>
+      <input class="search-input" id="searchInput" type="text" inputmode="numeric"
+        autocomplete="off" placeholder="Введите номер...">
+      <svg class="search-icon" id="searchIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    </div>
+    <div class="suggest-list" id="suggestList">
+      <div class="search-loading" id="searchLoading">поиск...</div>
+    </div>
+  </div>
+</div>
+
+<div id="sheet" class="hidden">
+  <div class="sheet-header-area" id="sheetDragHandle">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title" id="sheetTitle">Наблюдения</div>
+      <div class="sheet-meta"  id="sheetMeta"></div>
+    </div>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BASE_URL = '/api';
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.disableVerticalSwipes();
+  tg.setHeaderColor('#080b10');
+  tg.setBackgroundColor('#080b10');
+}
+
+if (!tg?.initData) {
+  document.body.innerHTML = `
+    <div style="position:fixed;inset:0;background:#080b10;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px;font-family:'Azeret Mono',monospace;z-index:9999">
+      <div style="font-size:64px;font-weight:700;color:rgba(255,62,108,.15);letter-spacing:.2em">403</div>
+      <div style="font-size:14px;letter-spacing:.15em;color:#ff3e6c;font-family:'Tektur',sans-serif">ACCESS DENIED</div>
+      <div style="font-size:12px;color:#4a5a6a;text-align:center;line-height:1.8">
+        Доступ только через<br>Telegram Mini App
+      </div>
+    </div>`;
+  throw new Error('no initData');
+}
+
+function authHeaders() { return { 'X-Telegram-Init-Data': tg?.initData || '' }; }
+
+const map = L.map('map', { center: [55.75, 37.62], zoom: 10, zoomControl: false, attributionControl: false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let searchType = 'imsi', suggestTimer = null, markers = [], polyline = null;
+let activeMarkerIdx = -1;
+
+// --- ЛОГИКА ШТОРКИ (BOTTOM SHEET) ---
+const sheet = document.getElementById('sheet');
+const dragHandle = document.getElementById('sheetDragHandle');
+let startY, startTranslateY, currentTranslateY;
+const vh = window.innerHeight * 0.85;
+const snapPoints = {
+  full: 0,
+  half: window.innerHeight * 0.45,
+  peek: window.innerHeight * 0.85 - 72,
+  hidden: window.innerHeight
+};
+
+function setSheetState(state) {
+  sheet.classList.remove('dragging', 'full', 'half', 'peek', 'hidden');
+  sheet.classList.add(state);
+  sheet.style.transform = ''; // Сбрасываем инлайновый стиль, чтобы работал CSS класс
+}
+
+dragHandle.addEventListener('touchstart', e => {
+  startY = e.touches[0].clientY;
+  const matrix = new WebKitCSSMatrix(window.getComputedStyle(sheet).transform);
+  startTranslateY = matrix.m42;
+  sheet.classList.add('dragging');
+}, { passive: true });
+
+dragHandle.addEventListener('touchmove', e => {
+  const deltaY = e.touches[0].clientY - startY;
+  currentTranslateY = Math.max(0, startTranslateY + deltaY);
+  sheet.style.transform = `translateY(${currentTranslateY}px)`;
+}, { passive: true });
+
+dragHandle.addEventListener('touchend', e => {
+  sheet.classList.remove('dragging');
+  // Находим ближайшую точку притяжения
+  const closest = Object.keys(snapPoints).reduce((a, b) => 
+    Math.abs(snapPoints[a] - currentTranslateY) < Math.abs(snapPoints[b] - currentTranslateY) ? a : b
+  );
+  setSheetState(closest);
+});
+
+// Клик по заголовку просто переключает состояния
+dragHandle.addEventListener('click', () => {
+  if (sheet.classList.contains('peek')) setSheetState('half');
+  else if (sheet.classList.contains('half')) setSheetState('full');
+  else setSheetState('peek');
+});
+
+// --- ПОИСК И ОСТАЛЬНОЕ ---
+
+function toggleType() {
+  searchType = searchType === 'imsi' ? 'imei' : 'imsi';
+  document.getElementById('typeTag').textContent = searchType.toUpperCase();
+  document.getElementById('searchInput').placeholder = `Введите ${searchType.toUpperCase()}...`;
+  closeSuggest();
+}
+
+const input = document.getElementById('searchInput');
+input.addEventListener('focus', () => document.getElementById('overlay').classList.add('top'));
+input.addEventListener('input', () => {
+  const v = input.value.trim();
+  document.getElementById('searchClear').classList.toggle('show', v.length > 0);
+  document.getElementById('searchIcon').style.display = v ? 'none' : 'block';
+  clearTimeout(suggestTimer);
+  if (v.length < 3) { closeSuggest(); return; }
+  suggestTimer = setTimeout(() => triggerSuggest(v), 280);
+});
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const v = input.value.trim(); if (v.length >= 5) doSearch(v); }
+});
+
+function clearSearch() {
+  input.value = ''; input.disabled = false;
+  input.classList.remove('no-tag');
+  document.getElementById('typeTag').classList.remove('hidden');
+  document.getElementById('searchClear').classList.remove('show');
+  document.getElementById('searchIcon').style.display = 'block';
+  document.getElementById('overlay').classList.remove('top');
+  closeSuggest(); clearResults();
+}
+
+async function triggerSuggest(q) {
+  const loading = document.getElementById('searchLoading');
+  const list    = document.getElementById('suggestList');
+  list.classList.add('open'); loading.classList.add('show');
+  Array.from(list.querySelectorAll('.suggest-item')).forEach(el => el.remove());
+  try {
+    const r = await fetch(`${BASE_URL}/search/suggest?q=${encodeURIComponent(q)}&kind=${searchType}`, { headers: authHeaders() });
+    const data = await r.json();
+    loading.classList.remove('show');
+    if (!data?.length) { list.classList.remove('open'); return; }
+    data.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'suggest-item';
+      el.innerHTML = `<span class="suggest-icon">◈</span>${item.value}`;
+      el.onclick = () => { input.value = item.value; closeSuggest(); doSearch(item.value); };
+      list.appendChild(el);
+    });
+  } catch { loading.classList.remove('show'); }
+}
+
+function closeSuggest() {
+  document.getElementById('suggestList').classList.remove('open');
+}
+
+async function doSearch(value) {
+  closeSuggest(); input.blur(); showToast('поиск...', 0);
+  try {
+    const param = searchType === 'imsi' ? 'imsi' : 'imei';
+    const r = await fetch(`${BASE_URL}/search?${param}=${encodeURIComponent(value)}`, { headers: authHeaders() });
+    if (!r.ok) { showToast(r.status === 404 ? 'не найдено' : 'ошибка'); return; }
+    const data = await r.json();
+    hideToast();
+    input.disabled = true;
+    input.classList.add('no-tag');
+    document.getElementById('typeTag').classList.add('hidden');
+    renderResults(data);
+  } catch { showToast('ошибка соединения'); }
+}
+
+function renderResults(data) {
+  clearMarkersOnly();
+  document.getElementById('map').classList.add('active');
+  const sightings = [...(data.SightingsParametr || []), ...(data.SightingsRK || [])]
+    .sort((a, b) => new Date(a.SeenAt) - new Date(b.SeenAt));
+  
+  const points = sightings.filter(s => s.Lat && s.Lon).map(s => [s.Lat, s.Lon]);
+  if (points.length > 1) {
+    polyline = L.polyline(points, { color: 'rgba(0,200,255,0.35)', weight: 2, dashArray: '6 4' }).addTo(map);
+  }
+
+  sightings.forEach((s, i) => {
+    if (!s.Lat || !s.Lon) return;
+    const m = L.marker([s.Lat, s.Lon], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div class="custom-marker" id="marker-${i}"><span>${i+1}</span></div>`,
+        iconSize: [32, 32], iconAnchor: [16, 32]
+      })
+    }).addTo(map);
+    m.on('click', () => selectSighting(i, sightings));
+    markers.push({ marker: m, idx: i });
+  });
+
+  if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: 15 });
+  buildSheet(sightings);
+  setSheetState('peek');
+}
+
+function buildSheet(sightings) {
+  const body = document.getElementById('sheetBody');
+  body.innerHTML = '';
+  document.getElementById('sheetMeta').textContent = `${sightings.length} зап.`;
+  sightings.forEach((s, i) => {
+    const date = new Date(s.SeenAt);
+    const time = date.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+    const el = document.createElement('div');
+    el.className = 'sighting'; el.id = `sighting-${i}`;
+    el.innerHTML = `
+      <div class="sighting-num">${i+1}</div>
+      <div class="sighting-main">
+        <div class="sighting-time">${time} · ${date.toLocaleDateString('ru')}</div>
+        <div class="sighting-detail">${s.Operator || '—'} · ${s.Event || '—'}</div>
+      </div>
+      <div class="sighting-coords">${s.Lat ? s.Lat.toFixed(4) : ''}</div>`;
+    el.onclick = () => selectSighting(i, sightings);
+    body.appendChild(el);
+  });
+}
+
+function selectSighting(i, sightings) {
+  document.getElementById(`marker-${activeMarkerIdx}`)?.classList.remove('active');
+  document.getElementById(`sighting-${activeMarkerIdx}`)?.classList.remove('active');
+  activeMarkerIdx = i;
+  document.getElementById(`marker-${i}`)?.classList.add('active');
+  const row = document.getElementById(`sighting-${i}`);
+  if (row) { row.classList.add('active'); row.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  const m = markers.find(m => m.idx === i);
+  if (m) map.flyTo(m.marker.getLatLng(), 15);
+  setSheetState('half');
+}
+
+function clearMarkersOnly() {
+  markers.forEach(m => map.removeLayer(m.marker)); markers = [];
+  if (polyline) map.removeLayer(polyline); polyline = null;
+}
+
+function clearResults() {
+  clearMarkersOnly();
+  document.getElementById('map').classList.remove('active');
+  setSheetState('hidden');
+}
+
+function showToast(msg, duration = 3000) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  if (duration > 0) setTimeout(hideToast, duration);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+document.addEventListener('click', e => { if (!document.getElementById('searchBox').contains(e.target)) closeSuggest(); });
+</script>
+</body>
+</html>
